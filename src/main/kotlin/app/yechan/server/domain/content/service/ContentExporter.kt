@@ -35,7 +35,7 @@ class ContentExporter(
         val file = Files.createTempFile("content-export", ".zip")
         try {
             Files.newOutputStream(file).use(::write)
-        } catch (ex: RuntimeException) {
+        } catch (ex: Exception) {
             Files.deleteIfExists(file)
             throw ex
         }
