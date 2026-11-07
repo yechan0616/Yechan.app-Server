@@ -18,5 +18,5 @@ COPY --from=build /workspace/extracted/application/ ./
 USER app
 EXPOSE 8080
 ENV TZ=UTC \
-    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -XX:+UseZGC -Xss512k"
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
