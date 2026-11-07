@@ -54,6 +54,7 @@ class Entries(
     fun create(
         blueprintKey: String,
         request: CreateEntryRequest,
+        id: UUID? = null,
     ): EntryResponse {
         val blueprint = blueprints.require(blueprintKey)
         blueprints.requireSingletonVacant(blueprint)
@@ -64,7 +65,7 @@ class Entries(
         ) {
             throw BusinessException(ContentErrorCode.ENTRY_SLUG_TAKEN)
         }
-        return entries.save(Entry(blueprint, slug, request.position, request.content)).toResponse()
+        return entries.save(Entry(blueprint, slug, request.position, request.content, id)).toResponse()
     }
 
     @Transactional

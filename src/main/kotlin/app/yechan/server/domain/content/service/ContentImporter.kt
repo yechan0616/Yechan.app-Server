@@ -75,7 +75,8 @@ class ContentImporter(
             } else {
                 // Forward references are filled in once every entry exists.
                 val content = resolve(entry.content, ids, assets, strict = false) as ObjectNode
-                val saved = entries.create(entry.blueprint, CreateEntryRequest(entry.slug, entry.position, content))
+                val request = CreateEntryRequest(entry.slug, entry.position, content)
+                val saved = entries.create(entry.blueprint, request, preservedId(entry))
                 ids[entry.ref] = saved.id
                 created += entry to saved
             }
@@ -136,14 +137,19 @@ class ContentImporter(
             else -> false
         }
 
+    // Exported bundles use entry ids as refs, so an entry keeps its id across servers and re-imports.
     private fun existingEntry(entry: BundleEntry): UUID? {
         val blueprint = blueprints.require(entry.blueprint)
+        preservedId(entry)?.takeIf { entryRepository.existsById(it) }?.let { return it }
         return if (blueprint.kind == BlueprintKind.SINGLETON) {
             entryRepository.findFirstByBlueprintId(blueprint.id)?.id
         } else {
             entry.slug?.let { entryRepository.findByBlueprintIdAndSlug(blueprint.id, it)?.id }
         }
     }
+
+    private fun preservedId(entry: BundleEntry): UUID? =
+        runCatching { UUID.fromString(entry.ref) }.getOrNull()?.takeIf { entryRepository.findTrashed(it) == null }
 
     private fun resolve(
         node: JsonNode,

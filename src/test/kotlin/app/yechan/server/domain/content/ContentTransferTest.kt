@@ -141,16 +141,14 @@ class ContentTransferTest : IntegrationTest() {
         return json(studio { put("/api/v1/studio/entries/$id/publication") { body(revision) } })
     }
 
-    // Ids and storage URLs change on import, so compare everything else.
+    // Entry ids survive the round trip; only storage URLs change on import.
     private fun publicState(): List<String> =
         listOf("author", "post").map { key ->
             val response = mockMvc.get("/api/v1/public/collections/$key?locale=en").andReturn().response
             json.readTree(response.contentAsString)["items"].values().joinToString("|") { item ->
                 val content = item["content"].deepCopy() as ObjectNode
-                (content["author"] as? ObjectNode)?.remove("id")
                 (content["cover"] as? ObjectNode)?.remove("url")
-                content["links"]?.values()?.forEach { (it["to"] as? ObjectNode)?.remove("id") }
-                "${item["slug"].stringValue()}=$content"
+                "${item["id"].stringValue()}:${item["slug"].stringValue()}=$content"
             }
         }
 

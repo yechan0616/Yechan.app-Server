@@ -13,6 +13,7 @@ import org.hibernate.annotations.ColumnTransformer
 import org.hibernate.annotations.SQLRestriction
 import tools.jackson.databind.node.ObjectNode
 import java.time.Instant
+import java.util.UUID
 
 // Trashed entries stay in the table for a while; every JPA query skips them.
 @Entity
@@ -25,7 +26,8 @@ class Entry(
     slug: String?,
     position: Int,
     draft: ObjectNode,
-) : BaseEntity() {
+    id: UUID? = null,
+) : BaseEntity(id) {
     @Column(length = 96)
     var slug: String? = slug
         protected set
