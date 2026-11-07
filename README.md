@@ -1,6 +1,6 @@
 # yechan.app-server
 
-yechan.app에서 쓰는 CMS 서버입니다.
+yechan.app에서 사용하는 CMS 서버입니다.
 
 Kotlin, Spring Boot 4, PostgreSQL, Cloudflare R2
 
