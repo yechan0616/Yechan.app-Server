@@ -23,6 +23,7 @@ enum class ContentErrorCode(
     ENTRY_NOT_IN_TRASH(HttpStatus.NOT_FOUND, "Entry is not in the trash."),
     ENTRY_QUERY_INVALID(HttpStatus.BAD_REQUEST, "Filter or sort is not supported for this blueprint."),
     ENTRY_ORDER_INVALID(HttpStatus.BAD_REQUEST, "Order must list distinct entries of this blueprint."),
+    BUNDLE_INVALID(HttpStatus.BAD_REQUEST, "Content bundle is invalid."),
     PREVIEW_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Preview link is invalid or has expired."),
     ;
 

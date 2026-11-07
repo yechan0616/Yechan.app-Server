@@ -4,6 +4,7 @@ import app.yechan.server.domain.auth.dto.AdministratorPrincipal
 import app.yechan.server.domain.auth.service.StudioAuthentication
 import app.yechan.server.support.Images
 import app.yechan.server.support.IntegrationTest
+import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -21,8 +22,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.async
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.node.ObjectNode
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.UUID
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -82,7 +86,10 @@ class ContentTransferTest : IntegrationTest() {
             .multipart("/api/v1/studio/import") {
                 file(MockMultipartFile("file", "evil.zip", "application/zip", malicious))
                 with(authentication(administrator))
-            }.andExpect { status { is5xxServerError() } }
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.code") { value("BUNDLE_INVALID") }
+            }
     }
 
     private fun seed() {
@@ -154,6 +161,37 @@ class ContentTransferTest : IntegrationTest() {
                 "${item["id"].stringValue()}:${item["slug"].stringValue()}=$content"
             }
         }
+
+    @Test
+    fun `잘못된 번들은 400 BUNDLE_INVALID로 거절한다`() {
+        val escaping = zip("bundle.json" to """{"assets":[{"ref":"x","file":"../../etc/passwd"}]}""".toByteArray())
+        val broken = zip("bundle.json" to "{".toByteArray())
+        val empty = zip()
+        listOf(escaping to "outside the bundle", broken to "cannot be parsed", empty to "bundle.json is missing")
+            .forEach { (archive, reason) ->
+                mockMvc
+                    .multipart("/api/v1/studio/import") {
+                        file(MockMultipartFile("file", "content.zip", "application/zip", archive))
+                        auth()
+                    }.andExpect {
+                        status { isBadRequest() }
+                        jsonPath("$.code") { value("BUNDLE_INVALID") }
+                        jsonPath("$.detail") { value(containsString(reason)) }
+                    }
+            }
+    }
+
+    private fun zip(vararg files: Pair<String, ByteArray>): ByteArray {
+        val bytes = ByteArrayOutputStream()
+        ZipOutputStream(bytes).use { zip ->
+            files.forEach { (name, content) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(content)
+                zip.closeEntry()
+            }
+        }
+        return bytes.toByteArray()
+    }
 
     private fun export(): ByteArray {
         val started =

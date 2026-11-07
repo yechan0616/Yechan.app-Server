@@ -1,8 +1,10 @@
 package app.yechan.server.domain.content.controller
 
 import app.yechan.server.domain.content.dto.ImportReport
+import app.yechan.server.domain.content.exception.ContentErrorCode
 import app.yechan.server.domain.content.service.ContentExporter
 import app.yechan.server.domain.content.service.ContentImporter
+import app.yechan.server.global.error.BusinessException
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody
+import tools.jackson.core.JacksonException
 import java.nio.file.Files
 import java.time.Clock
 import java.time.ZoneId
@@ -56,7 +59,18 @@ class ContentTransferController(
     @PostMapping("/import", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun import(
         @RequestPart("file") file: MultipartFile,
-    ): ImportReport = file.inputStream.use(importer::importArchive)
+    ): ImportReport =
+        try {
+            file.inputStream.use(importer::importArchive)
+        } catch (ex: IllegalArgumentException) {
+            throw BusinessException(
+                ContentErrorCode.BUNDLE_INVALID,
+                ex.message ?: ContentErrorCode.BUNDLE_INVALID.message,
+                cause = ex,
+            )
+        } catch (ex: JacksonException) {
+            throw BusinessException(ContentErrorCode.BUNDLE_INVALID, "bundle.json cannot be parsed.", cause = ex)
+        }
 
     private companion object {
         val SEOUL: ZoneId = ZoneId.of("Asia/Seoul")

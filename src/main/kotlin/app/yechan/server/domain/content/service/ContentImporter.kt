@@ -49,7 +49,9 @@ class ContentImporter(
 
     private fun importDirectory(directory: Path): ImportReport {
         val root = directory.toRealPath()
-        val bundle = json.readValue<ContentBundle>(Files.readAllBytes(root.resolve(BUNDLE_FILE)))
+        val manifest = root.resolve(BUNDLE_FILE)
+        require(Files.isRegularFile(manifest)) { "$BUNDLE_FILE is missing" }
+        val bundle = json.readValue<ContentBundle>(Files.readAllBytes(manifest))
         val blueprintsCreated = createBlueprints(bundle.blueprints)
 
         var assetsUploaded = 0
