@@ -7,10 +7,13 @@ import app.yechan.server.domain.media.exception.MediaErrorCode
 import app.yechan.server.domain.media.repository.AssetRepository
 import app.yechan.server.global.common.response.PageResponse
 import app.yechan.server.global.error.BusinessException
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
@@ -28,6 +31,8 @@ class MediaAssets(
     private val usages: ObjectProvider<AssetUsage>,
     private val clock: Clock,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     fun checkSize(size: Long) {
         if (size > properties.maxFileSize.toBytes()) throw BusinessException(MediaErrorCode.ASSET_TOO_LARGE)
     }
@@ -96,8 +101,7 @@ class MediaAssets(
         val used = usedAmong(candidates.map { it.id })
         val targets = candidates.filterNot { it.id in used }
         assets.deleteAll(targets)
-        assets.flush()
-        targets.forEach { runCatching { storage.delete(it.storageKey) } }
+        deleteFromStorageAfterCommit(targets.map { it.storageKey })
         return targets.size
     }
 
@@ -128,8 +132,25 @@ class MediaAssets(
         val asset = require(id)
         if (usedAmong(listOf(id)).isNotEmpty()) throw BusinessException(MediaErrorCode.ASSET_IN_USE)
         assets.delete(asset)
-        assets.flush()
-        storage.delete(asset.storageKey)
+        deleteFromStorageAfterCommit(listOf(asset.storageKey))
+    }
+
+    // Objects go only once the row deletion is committed; a rollback must not leave a row without its file.
+    private fun deleteFromStorageAfterCommit(keys: List<String>) {
+        if (keys.isEmpty()) return
+        TransactionSynchronizationManager.registerSynchronization(
+            object : TransactionSynchronization {
+                override fun afterCommit() {
+                    keys.forEach { key ->
+                        runCatching {
+                            storage.delete(
+                                key,
+                            )
+                        }.onFailure { log.warn("Failed to delete object {}", key, it) }
+                    }
+                }
+            },
+        )
     }
 
     private fun usedAmong(ids: Collection<UUID>): Set<UUID> =
