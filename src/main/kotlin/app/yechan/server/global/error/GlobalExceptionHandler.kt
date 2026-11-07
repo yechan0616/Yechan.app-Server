@@ -1,5 +1,8 @@
 package app.yechan.server.global.error
 
+import org.apache.catalina.connector.ClientAbortException
+import org.hibernate.exception.ConstraintViolationException
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
@@ -13,6 +16,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
 import java.time.Clock
@@ -35,10 +39,41 @@ class GlobalExceptionHandler(
     @ExceptionHandler(AuthenticationException::class, AccessDeniedException::class)
     fun rethrowSecurity(ex: RuntimeException): Nothing = throw ex
 
-    @ExceptionHandler(DataIntegrityViolationException::class, OptimisticLockingFailureException::class)
-    fun handleConflict(ex: RuntimeException): ResponseEntity<ProblemDetail> {
+    @ExceptionHandler(OptimisticLockingFailureException::class)
+    fun handleOptimisticLock(ex: OptimisticLockingFailureException): ResponseEntity<ProblemDetail> {
         log.warn("Concurrent modification conflict: {}", ex.javaClass.simpleName)
         return respond(ProblemDetails.of(CommonErrorCode.CONFLICT, clock))
+    }
+
+    // Unique and foreign key violations are conflicts with existing data; check and not-null violations are bad input.
+    @ExceptionHandler(DataIntegrityViolationException::class)
+    fun handleDataIntegrity(ex: DataIntegrityViolationException): ResponseEntity<ProblemDetail> {
+        val violation =
+            generateSequence<Throwable>(ex) {
+                it.cause
+            }.filterIsInstance<ConstraintViolationException>().firstOrNull()
+        val errorCode =
+            when (violation?.kind) {
+                ConstraintKind.CHECK, ConstraintKind.NOT_NULL -> CommonErrorCode.INVALID_INPUT
+                else -> CommonErrorCode.CONFLICT
+            }
+        log.warn("Data integrity violation: {} ({})", violation?.constraintName, errorCode.code)
+        return respond(ProblemDetails.of(errorCode, clock))
+    }
+
+    // The client went away; there is nobody left to answer and nothing to fix on the server.
+    @ExceptionHandler(ClientAbortException::class)
+    fun handleClientAbort(ex: ClientAbortException): ResponseEntity<Unit>? {
+        log.debug("Client aborted the connection", ex)
+        return null
+    }
+
+    override fun handleAsyncRequestNotUsableException(
+        ex: AsyncRequestNotUsableException,
+        request: WebRequest,
+    ): ResponseEntity<Any>? {
+        log.debug("Async response is no longer usable", ex)
+        return null
     }
 
     @ExceptionHandler(Exception::class)

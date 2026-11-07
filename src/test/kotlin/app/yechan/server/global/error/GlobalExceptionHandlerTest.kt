@@ -44,6 +44,30 @@ class GlobalExceptionHandlerTest(
     }
 
     @Test
+    fun `제약 위반은 종류에 따라 400 또는 409로 나뉜다`() {
+        listOf("CHECK", "NOT_NULL").forEach { kind ->
+            mockMvc.get("/api/v1/public/probe/constraint?kind=$kind").andExpect {
+                status { isBadRequest() }
+                jsonPath("$.code") { value("INVALID_INPUT") }
+            }
+        }
+        listOf("UNIQUE", "FOREIGN_KEY", "OTHER").forEach { kind ->
+            mockMvc.get("/api/v1/public/probe/constraint?kind=$kind").andExpect {
+                status { isConflict() }
+                jsonPath("$.code") { value("CONFLICT") }
+            }
+        }
+    }
+
+    @Test
+    fun `클라이언트가 연결을 끊으면 에러 응답을 만들지 않는다`() {
+        mockMvc.get("/api/v1/public/probe/abort").andExpect {
+            status { isOk() }
+            content { string("") }
+        }
+    }
+
+    @Test
     @WithMockUser(roles = ["ADMINISTRATOR"])
     fun `RequestBody 검증 실패는 필드별 errors와 함께 400을 반환한다`() {
         mockMvc

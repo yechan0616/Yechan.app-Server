@@ -9,10 +9,14 @@ import app.yechan.server.global.security.SecurityConfig
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
+import org.apache.catalina.connector.ClientAbortException
+import org.hibernate.exception.ConstraintViolationException
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -20,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.io.IOException
+import java.sql.SQLException
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -56,6 +62,18 @@ class ProbeController {
 
     @GetMapping("/public/probe/boom")
     fun boom(): Nothing = throw IllegalStateException("secret internal detail")
+
+    @GetMapping("/public/probe/constraint")
+    fun constraint(
+        @RequestParam kind: ConstraintKind,
+    ): Nothing =
+        throw DataIntegrityViolationException(
+            "violated",
+            ConstraintViolationException("violated", SQLException("violated"), kind, "probe_constraint"),
+        )
+
+    @GetMapping("/public/probe/abort")
+    fun abort(): Nothing = throw ClientAbortException(IOException("Broken pipe"))
 
     @GetMapping("/public/probe/page")
     fun page(
