@@ -6,11 +6,14 @@ import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.security.SecurityScheme
 import org.springdoc.core.models.GroupedOpenApi
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 @Configuration(proxyBeanMethods = false)
-class OpenApiConfig {
+class OpenApiConfig(
+    @Value("\${app.auth.session.cookie-name}") private val sessionCookieName: String,
+) {
     @Bean
     fun openApi(): OpenAPI =
         OpenAPI()
@@ -22,7 +25,7 @@ class OpenApiConfig {
                         .type(
                             SecurityScheme.Type.APIKEY,
                         ).`in`(SecurityScheme.In.COOKIE)
-                        .name("studio_session"),
+                        .name(sessionCookieName),
                 ),
             )
 

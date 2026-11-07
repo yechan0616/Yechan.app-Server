@@ -143,6 +143,21 @@ class ContentApiTest : IntegrationTest() {
     }
 
     @Test
+    fun `요청에 모르는 필드가 있으면 조용히 버리지 않고 거절한다`() {
+        studio {
+            post("/api/v1/studio/blueprints") {
+                jsonBody(
+                    """{"key":"typo","name":"Typo","kind":"collection",
+                        "fields":[{"key":"title","label":"Title","type":"string","maxLenght":5}]}""",
+                )
+            }
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.code") { value("INVALID_INPUT") }
+        }
+    }
+
+    @Test
     fun `참조 대상이 없거나 다른 Blueprint면 발행할 수 없다`() {
         definePortfolio()
         val profile = createEntry("profile", """{"content":{"name":"Yechan"}}""")
@@ -252,8 +267,9 @@ class ContentApiTest : IntegrationTest() {
         definePortfolio()
         createEntry("project", """{"slug":"toast","content":{}}""")
         val blueprint = studioJson { authGet("/api/v1/studio/blueprints/project") }
-        val body = (blueprint as tools.jackson.databind.node.ObjectNode).put("kind", "singleton")
-        studio { put("/api/v1/studio/blueprints/project") { jsonBody(body.toString()) } }
+        val body =
+            """{"name":"Projects","kind":"singleton","fields":${blueprint["fields"]},"revision":${blueprint["revision"]}}"""
+        studio { put("/api/v1/studio/blueprints/project") { jsonBody(body) } }
             .andExpect { jsonPath("$.code") { value("BLUEPRINT_KIND_LOCKED") } }
     }
 

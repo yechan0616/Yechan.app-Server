@@ -13,7 +13,7 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
   autoconfigure:
-    # No default in-memory user; authentication is passkey-only.
+    # No default in-memory user; administrators sign in with passkeys or their own password.
     exclude:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   servlet:
@@ -36,6 +36,8 @@ spring:
     locations: classpath:db/migration
   jackson:
     time-zone: UTC
+    deserialization:
+      fail-on-unknown-properties: true
 
 server:
   shutdown: graceful
