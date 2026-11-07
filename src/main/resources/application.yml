@@ -9,8 +9,8 @@ spring:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 21MB
+      max-file-size: 200MB
+      max-request-size: 210MB
   jpa:
     open-in-view: false
     hibernate:

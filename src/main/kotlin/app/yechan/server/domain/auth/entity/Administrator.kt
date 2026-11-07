@@ -59,6 +59,13 @@ class Administrator(
         lockedUntil = null
     }
 
+    fun removePassword() {
+        passwordHash = null
+        passwordChangedAt = null
+        failedSignIns = 0
+        lockedUntil = null
+    }
+
     fun rehashPassword(hash: String) {
         passwordHash = hash
     }

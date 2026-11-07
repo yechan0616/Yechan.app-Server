@@ -28,6 +28,9 @@ class AssetStorage(
         )
     }
 
+    fun get(key: String): ByteArray =
+        s3.getObjectAsBytes { it.bucket(properties.storage.bucket).key(key) }.asByteArray()
+
     fun delete(key: String) {
         s3.deleteObject { it.bucket(properties.storage.bucket).key(key) }
     }

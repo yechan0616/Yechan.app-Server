@@ -73,6 +73,32 @@ data class PreviewEntryResponse(
     val content: ObjectNode,
 )
 
+data class RevisionSummaryResponse(
+    val number: Int,
+    val slug: String?,
+    val createdAt: Instant,
+)
+
+data class RevisionResponse(
+    val number: Int,
+    val slug: String?,
+    val content: ObjectNode,
+    val createdAt: Instant,
+)
+
+data class RestoreRevisionRequest(
+    @field:NotNull
+    val revision: Long,
+)
+
+data class TrashedEntryResponse(
+    val id: UUID,
+    val blueprint: String,
+    val slug: String?,
+    val deletedAt: Instant,
+    val purgeAt: Instant,
+)
+
 data class LocalesResponse(
     val supported: List<String>,
     val default: String,

@@ -2,12 +2,15 @@ package app.yechan.server.domain.auth.service
 
 import app.yechan.server.domain.auth.config.AuthProperties
 import app.yechan.server.domain.auth.dto.CeremonyCompletionRequest
+import app.yechan.server.domain.auth.dto.ClientContext
 import app.yechan.server.domain.auth.dto.OnboardingOptionsRequest
 import app.yechan.server.domain.auth.dto.OnboardingStatusResponse
 import app.yechan.server.domain.auth.dto.PasskeyCreationOptionsResponse
 import app.yechan.server.domain.auth.dto.PasswordOnboardingRequest
 import app.yechan.server.domain.auth.entity.Administrator
 import app.yechan.server.domain.auth.entity.CeremonyPurpose
+import app.yechan.server.domain.auth.entity.SecurityEventType
+import app.yechan.server.domain.auth.entity.SignInMethod
 import app.yechan.server.domain.auth.exception.AuthErrorCode
 import app.yechan.server.domain.auth.repository.AdministratorRepository
 import app.yechan.server.domain.auth.repository.PasskeyRepository
@@ -27,6 +30,7 @@ class Onboarding(
     private val relyingParty: PasskeyRelyingParty,
     private val registrar: PasskeyRegistrar,
     private val sessions: StudioSessions,
+    private val events: SecurityEvents,
     private val encoder: PasswordEncoder,
     private val policy: PasswordPolicy,
     private val clock: Clock,
@@ -63,7 +67,7 @@ class Onboarding(
     fun complete(
         setupToken: String?,
         request: CeremonyCompletionRequest,
-        userAgent: String?,
+        client: ClientContext,
     ): IssuedSession {
         authorize(setupToken)
         val ceremony = ceremonies.consume(request.ceremonyId, CeremonyPurpose.ONBOARDING)
@@ -73,15 +77,16 @@ class Onboarding(
                 ?: administrators.save(
                     Administrator(username, checkNotNull(ceremony.displayName), checkNotNull(ceremony.userHandle)),
                 )
-        registrar.register(administrator, ceremony, request.credential, userAgent)
-        return sessions.issue(administrator, userAgent)
+        registrar.register(administrator, ceremony, request.credential, client)
+        events.record(SecurityEventType.ONBOARDED, administrator.id, client, SignInMethod.PASSKEY)
+        return sessions.issue(administrator, client)
     }
 
     @Transactional
     fun completeWithPassword(
         setupToken: String?,
         request: PasswordOnboardingRequest,
-        userAgent: String?,
+        client: ClientContext,
     ): IssuedSession {
         authorize(setupToken)
         val email = policy.normalizeEmail(request.email)
@@ -95,7 +100,9 @@ class Onboarding(
         }
         administrator.changeEmail(email)
         administrator.changePassword(checkNotNull(encoder.encode(request.password)), clock.instant())
-        return sessions.issue(administrators.save(administrator), userAgent)
+        val saved = administrators.save(administrator)
+        events.record(SecurityEventType.ONBOARDED, saved.id, client, SignInMethod.PASSWORD)
+        return sessions.issue(saved, client)
     }
 
     private fun authorize(setupToken: String?) {

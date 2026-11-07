@@ -1,20 +1,26 @@
 package app.yechan.server.domain.content.service
 
+import app.yechan.server.domain.content.dto.BundleEntry
 import app.yechan.server.domain.content.dto.ContentBundle
+import app.yechan.server.domain.content.dto.CreateBlueprintRequest
 import app.yechan.server.domain.content.dto.CreateEntryRequest
+import app.yechan.server.domain.content.dto.EntryResponse
 import app.yechan.server.domain.content.dto.ImportReport
 import app.yechan.server.domain.content.dto.PublishEntryRequest
+import app.yechan.server.domain.content.dto.UpdateEntryRequest
 import app.yechan.server.domain.content.entity.BlueprintKind
+import app.yechan.server.domain.content.entity.FieldDefinition
+import app.yechan.server.domain.content.entity.FieldType
 import app.yechan.server.domain.content.repository.BlueprintRepository
 import app.yechan.server.domain.content.repository.EntryRepository
 import app.yechan.server.domain.media.service.MediaAssets
 import org.springframework.stereotype.Service
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
-import tools.jackson.databind.node.ArrayNode
 import tools.jackson.databind.node.JsonNodeFactory
 import tools.jackson.databind.node.ObjectNode
 import tools.jackson.module.kotlin.readValue
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -29,15 +35,23 @@ class ContentImporter(
     private val entryRepository: EntryRepository,
     private val media: MediaAssets,
 ) {
-    fun import(directory: Path): ImportReport {
+    fun import(source: Path): ImportReport =
+        if (Files.isRegularFile(source)) Files.newInputStream(source).use(::importArchive) else importDirectory(source)
+
+    fun importArchive(archive: InputStream): ImportReport {
+        val directory = Files.createTempDirectory("content-bundle")
+        try {
+            BundleArchive.extract(archive, directory)
+            return importDirectory(directory)
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    private fun importDirectory(directory: Path): ImportReport {
         val root = directory.toRealPath()
         val bundle = json.readValue<ContentBundle>(Files.readAllBytes(root.resolve(BUNDLE_FILE)))
-
-        var blueprintsCreated = 0
-        bundle.blueprints.filterNot { blueprintRepository.existsByKey(it.key) }.forEach {
-            blueprints.create(it)
-            blueprintsCreated++
-        }
+        val blueprintsCreated = createBlueprints(bundle.blueprints)
 
         var assetsUploaded = 0
         val assets =
@@ -51,73 +65,131 @@ class ContentImporter(
                 asset.ref to uploaded.asset.id
             }
 
-        val created = mutableMapOf<String, UUID>()
-        var entriesCreated = 0
-        var entriesSkipped = 0
+        val ids = mutableMapOf<String, UUID>()
+        val created = mutableListOf<Pair<BundleEntry, EntryResponse>>()
+        var skipped = 0
         bundle.entries.forEach { entry ->
-            val blueprint = blueprints.require(entry.blueprint)
-            val existing =
-                if (blueprint.kind == BlueprintKind.SINGLETON) {
-                    entryRepository.findFirstByBlueprintId(blueprint.id)
-                } else {
-                    entry.slug?.let { entryRepository.findByBlueprintIdAndSlug(blueprint.id, it) }
-                }
+            val existing = existingEntry(entry)
             if (existing != null) {
-                created[entry.ref] = existing.id
-                entriesSkipped++
-                return@forEach
+                ids[entry.ref] = existing
+                skipped++
+            } else {
+                // References to entries created later are filled in once every entry exists.
+                val content = resolve(entry.content, ids, assets, strict = false) as ObjectNode
+                val saved = entries.create(entry.blueprint, CreateEntryRequest(entry.slug, entry.position, content))
+                ids[entry.ref] = saved.id
+                created += entry to saved
             }
-            val content = resolve(entry.content, created, assets) as ObjectNode
-            val saved = entries.create(entry.blueprint, CreateEntryRequest(entry.slug, entry.position, content))
-            if (entry.publish) entries.publish(saved.id, PublishEntryRequest(saved.revision))
-            created[entry.ref] = saved.id
-            entriesCreated++
         }
-        return ImportReport(blueprintsCreated, assetsUploaded, entriesCreated, entriesSkipped)
+
+        created.forEach { (entry, saved) ->
+            var current = saved
+
+            fun saveDraft(content: ObjectNode) {
+                current =
+                    entries.update(
+                        current.id,
+                        UpdateEntryRequest(
+                            entry.slug,
+                            entry.position,
+                            resolve(content, ids, assets) as ObjectNode,
+                            current.revision,
+                        ),
+                    )
+            }
+            if (entry.publish) {
+                saveDraft(entry.published ?: entry.content)
+                current = entries.publish(current.id, PublishEntryRequest(current.revision))
+                if (entry.published != null) saveDraft(entry.content)
+            } else {
+                saveDraft(entry.content)
+            }
+        }
+        return ImportReport(blueprintsCreated, assetsUploaded, created.size, skipped)
+    }
+
+    private fun createBlueprints(requests: List<CreateBlueprintRequest>): Int {
+        val pending = requests.filterNot { blueprintRepository.existsByKey(it.key) }.toMutableList()
+        var createdCount = 0
+        while (pending.isNotEmpty()) {
+            val known = blueprintRepository.findAllKeys()
+            val ready =
+                pending.filter { request ->
+                    request.fields.flatMap(::targets).all {
+                        it == request.key ||
+                            it in known
+                    }
+                }
+            // A reference cycle cannot be ordered; creating it anyway surfaces the validation error.
+            ready.ifEmpty { listOf(pending.first()) }.forEach {
+                blueprints.create(it)
+                pending.remove(it)
+                createdCount++
+            }
+        }
+        return createdCount
+    }
+
+    private fun targets(field: FieldDefinition): List<String> =
+        (if (field.type == FieldType.REFERENCE) field.blueprints.orEmpty() else emptyList()) +
+            listOfNotNull(field.item).flatMap(::targets) +
+            field.fields.orEmpty().flatMap(::targets)
+
+    private fun existingEntry(entry: BundleEntry): UUID? {
+        val blueprint = blueprints.require(entry.blueprint)
+        return if (blueprint.kind == BlueprintKind.SINGLETON) {
+            entryRepository.findFirstByBlueprintId(blueprint.id)?.id
+        } else {
+            entry.slug?.let { entryRepository.findByBlueprintIdAndSlug(blueprint.id, it)?.id }
+        }
     }
 
     private fun resolve(
         node: JsonNode,
         entries: Map<String, UUID>,
         assets: Map<String, UUID>,
-    ): JsonNode =
-        when {
+        strict: Boolean = true,
+    ): JsonNode {
+        val nodes = JsonNodeFactory.instance
+        return when {
             node.isObject -> {
-                val copy = JsonNodeFactory.instance.objectNode()
-                node.properties().forEach { (key, value) -> copy.set(key, resolve(value, entries, assets)) }
-                copy
+                nodes.objectNode().also { copy ->
+                    node.properties().forEach { (k, v) -> copy.set(k, resolve(v, entries, assets, strict)) }
+                }
             }
 
             node.isArray -> {
-                val copy: ArrayNode = JsonNodeFactory.instance.arrayNode()
-                node.values().forEach { copy.add(resolve(it, entries, assets)) }
-                copy
+                nodes.arrayNode().also { copy ->
+                    node.values().forEach {
+                        copy.add(
+                            resolve(it, entries, assets, strict),
+                        )
+                    }
+                }
             }
 
             node.isString && node.stringValue().startsWith(ENTRY_PREFIX) -> {
                 val ref = node.stringValue().removePrefix(ENTRY_PREFIX)
-                JsonNodeFactory.instance.stringNode(
-                    requireNotNull(entries[ref]) {
-                        "Unknown entry ref '$ref' (define it earlier)"
-                    }.toString(),
-                )
+                val id =
+                    entries[ref] ?: if (strict) throw IllegalArgumentException("Unknown entry ref '$ref'") else PENDING
+                nodes.stringNode(id.toString())
             }
 
             node.isString && node.stringValue().startsWith(ASSET_PREFIX) -> {
                 val ref = node.stringValue().removePrefix(ASSET_PREFIX)
-                JsonNodeFactory.instance.stringNode(
-                    requireNotNull(assets[ref]) { "Unknown asset ref '$ref'" }.toString(),
-                )
+                nodes.stringNode(requireNotNull(assets[ref]) { "Unknown asset ref '$ref'" }.toString())
             }
 
             else -> {
                 node
             }
         }
+    }
 
-    private companion object {
+    companion object {
         const val BUNDLE_FILE = "bundle.json"
         const val ENTRY_PREFIX = "@entry:"
         const val ASSET_PREFIX = "@asset:"
+        private val PENDING = UUID(0, 0)
     }
 }

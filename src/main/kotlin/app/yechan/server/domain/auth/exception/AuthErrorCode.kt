@@ -19,6 +19,8 @@ enum class AuthErrorCode(
     AUTH_EMAIL_REQUIRED(HttpStatus.BAD_REQUEST, "Set an email before enabling password sign-in."),
     AUTH_PASSWORD_WEAK(HttpStatus.BAD_REQUEST, "Password does not meet the policy."),
     AUTH_CURRENT_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect."),
+    AUTH_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "Session was not found."),
+    AUTH_LAST_CREDENTIAL(HttpStatus.CONFLICT, "At least one sign-in method must remain."),
     AUTH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many pending passkey ceremonies."),
     ;
 

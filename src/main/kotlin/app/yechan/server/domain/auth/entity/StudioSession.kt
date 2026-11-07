@@ -22,6 +22,8 @@ class StudioSession(
     val expiresAt: Instant,
     @Column(length = 255, updatable = false)
     val userAgent: String?,
+    @Column(length = 45, updatable = false)
+    val ipAddress: String?,
     issuedAt: Instant,
     idleTimeout: Duration,
 ) : BaseEntity() {

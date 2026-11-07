@@ -73,3 +73,8 @@ data class ChangePasswordRequest(
     @field:NotBlank @field:Size(max = 128)
     val newPassword: String,
 )
+
+data class DisablePasswordRequest(
+    @field:NotBlank @field:Size(max = 128)
+    val currentPassword: String,
+)

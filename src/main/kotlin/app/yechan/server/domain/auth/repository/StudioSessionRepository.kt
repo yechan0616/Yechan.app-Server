@@ -11,6 +11,13 @@ interface StudioSessionRepository : JpaRepository<StudioSession, UUID> {
     @Query("select s from StudioSession s join fetch s.administrator where s.tokenHash = :tokenHash")
     fun findByTokenHash(tokenHash: ByteArray): StudioSession?
 
+    fun findAllByAdministratorIdOrderByLastSeenAtDesc(administratorId: UUID): List<StudioSession>
+
+    fun findByIdAndAdministratorId(
+        id: UUID,
+        administratorId: UUID,
+    ): StudioSession?
+
     @Modifying
     @Query("delete from StudioSession s where s.administrator.id = :administratorId and s.id <> :keep")
     fun deleteOthers(

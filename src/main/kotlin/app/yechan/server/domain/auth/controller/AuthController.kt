@@ -9,14 +9,17 @@ import app.yechan.server.domain.auth.dto.PasskeyRequestOptionsResponse
 import app.yechan.server.domain.auth.dto.PasswordOnboardingRequest
 import app.yechan.server.domain.auth.dto.PasswordSignInRequest
 import app.yechan.server.domain.auth.dto.SessionResponse
+import app.yechan.server.domain.auth.entity.SecurityEventType
 import app.yechan.server.domain.auth.service.IssuedSession
 import app.yechan.server.domain.auth.service.Onboarding
 import app.yechan.server.domain.auth.service.PasswordSignIn
+import app.yechan.server.domain.auth.service.SecurityEvents
 import app.yechan.server.domain.auth.service.SignIn
 import app.yechan.server.domain.auth.service.StudioSessions
 import app.yechan.server.global.error.BusinessException
 import app.yechan.server.global.error.CommonErrorCode
 import app.yechan.server.global.security.SecurityConfig
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -36,6 +39,7 @@ class AuthController(
     private val signIn: SignIn,
     private val passwordSignIn: PasswordSignIn,
     private val sessions: StudioSessions,
+    private val events: SecurityEvents,
     private val cookies: SessionCookies,
 ) {
     @GetMapping("/onboarding")
@@ -50,39 +54,43 @@ class AuthController(
     @PostMapping("/onboarding")
     fun completeOnboarding(
         @RequestHeader(SecurityConfig.SETUP_TOKEN_HEADER, required = false) setupToken: String?,
-        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
         @Valid @RequestBody request: CeremonyCompletionRequest,
+        http: HttpServletRequest,
     ): ResponseEntity<SessionResponse> =
-        signedIn(HttpStatus.CREATED, onboarding.complete(setupToken, request, userAgent))
+        signedIn(HttpStatus.CREATED, onboarding.complete(setupToken, request, http.client()))
+
+    @PostMapping("/onboarding/password")
+    fun completePasswordOnboarding(
+        @RequestHeader(SecurityConfig.SETUP_TOKEN_HEADER, required = false) setupToken: String?,
+        @Valid @RequestBody request: PasswordOnboardingRequest,
+        http: HttpServletRequest,
+    ): ResponseEntity<SessionResponse> =
+        signedIn(HttpStatus.CREATED, onboarding.completeWithPassword(setupToken, request, http.client()))
 
     @PostMapping("/sign-in/options")
     fun beginSignIn(): PasskeyRequestOptionsResponse = signIn.begin()
 
     @PostMapping("/sign-in")
     fun completeSignIn(
-        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
         @Valid @RequestBody request: CeremonyCompletionRequest,
-    ): ResponseEntity<SessionResponse> = signedIn(HttpStatus.OK, signIn.complete(request, userAgent))
-
-    @PostMapping("/onboarding/password")
-    fun completePasswordOnboarding(
-        @RequestHeader(SecurityConfig.SETUP_TOKEN_HEADER, required = false) setupToken: String?,
-        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
-        @Valid @RequestBody request: PasswordOnboardingRequest,
-    ): ResponseEntity<SessionResponse> =
-        signedIn(HttpStatus.CREATED, onboarding.completeWithPassword(setupToken, request, userAgent))
+        http: HttpServletRequest,
+    ): ResponseEntity<SessionResponse> = signedIn(HttpStatus.OK, signIn.complete(request, http.client()))
 
     @PostMapping("/sign-in/password")
     fun signInWithPassword(
-        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
         @Valid @RequestBody request: PasswordSignInRequest,
-    ): ResponseEntity<SessionResponse> = signedIn(HttpStatus.OK, passwordSignIn.signIn(request, userAgent))
+        http: HttpServletRequest,
+    ): ResponseEntity<SessionResponse> = signedIn(HttpStatus.OK, passwordSignIn.signIn(request, http.client()))
 
     @PostMapping("/sign-out")
     fun signOut(
         @AuthenticationPrincipal principal: AdministratorPrincipal?,
+        http: HttpServletRequest,
     ): ResponseEntity<Unit> {
-        principal?.let { sessions.revoke(it.sessionId) }
+        principal?.let {
+            sessions.revoke(it.sessionId)
+            events.record(SecurityEventType.SIGNED_OUT, it.id, http.client())
+        }
         return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookies.clear()).build()
     }
 

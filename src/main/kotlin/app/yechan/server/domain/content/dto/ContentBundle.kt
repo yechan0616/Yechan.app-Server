@@ -21,6 +21,7 @@ data class BundleEntry(
     val position: Int = 0,
     val publish: Boolean = true,
     val content: ObjectNode,
+    val published: ObjectNode? = null,
 )
 
 data class ImportReport(

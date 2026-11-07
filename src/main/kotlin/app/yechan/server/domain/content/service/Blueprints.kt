@@ -66,6 +66,7 @@ class Blueprints(
         ) {
             throw BusinessException(ContentErrorCode.BLUEPRINT_IN_USE)
         }
+        entries.purgeTrashOf(blueprint.id)
         blueprints.delete(blueprint)
     }
 

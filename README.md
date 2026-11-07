@@ -42,11 +42,13 @@ entry 내용 안의 `"@entry:<ref>"`, `"@asset:<ref>"`는 가져오면서 실제
 | --- | --- |
 | Blueprint | 콘텐츠 타입. `collection`(여러 entry, slug로 구분) 또는 `singleton`(하나뿐, 사이트 설정 등) |
 | Field | `string` `text` `markdown` `number` `integer` `boolean` `url` `email` `date` `datetime` `select` `reference` `asset` `list` `object` |
-| Asset | 업로드한 이미지(JPEG, PNG, GIF, WebP). S3 호환 저장소(운영 R2)에 저장하고 CDN 주소로 공개 |
+| Asset | 업로드한 이미지(JPEG, PNG, GIF, WebP). 위치·카메라 정보(EXIF, XMP 등)는 재인코딩 없이 지우고 회전 값만 남긴다. S3 호환 저장소(운영 R2)에 저장하고 CDN 주소로 공개 |
 | Entry | Blueprint를 따르는 문서. 초안(draft)을 고치고, 발행(publish)하면 그 시점의 사본이 공개된다 |
 | 다국어 | 텍스트 필드에 `localized: true` → `{"en": "...", "ko": "..."}`. 비어 있으면 기본 언어로 대체 |
 
 초안은 형태만 검사하고, 발행할 때 필수 값·참조 대상까지 검사한다.
+
+삭제한 entry는 30일 동안 휴지통에 남고, 발행할 때마다 이력(최근 50개)이 남아 이전 버전을 초안으로 되돌릴 수 있다.
 
 `asset` 필드 값은 `{"asset": "<asset id>", "alt": {"en": "...", "ko": "..."}}`이고, 공개 응답에서는 `{url, width, height, contentType, alt}`로 펼쳐진다.
 
@@ -74,13 +76,20 @@ entry 내용 안의 `"@entry:<ref>"`, `"@asset:<ref>"`는 가져오면서 실제
 | 경로 | 설명 |
 | --- | --- |
 | `GET/POST /api/v1/studio/blueprints`, `GET/PUT/DELETE /{key}` | Blueprint 관리 |
-| `GET/POST /api/v1/studio/blueprints/{key}/entries` | entry 목록, 초안 생성 |
-| `GET/PUT/DELETE /api/v1/studio/entries/{id}` | entry 조회, 초안 수정(`revision` 필요), 삭제 |
+| `GET /api/v1/studio/blueprints/{key}/entries?q=&status=` | entry 목록 (검색어, `DRAFT`/`PUBLISHED`/`CHANGED`) |
+| `POST /api/v1/studio/blueprints/{key}/entries` | 초안 생성 |
+| `GET/PUT /api/v1/studio/entries/{id}` | entry 조회, 초안 수정(`revision` 필요) |
+| `DELETE /api/v1/studio/entries/{id}?force=` | 휴지통으로 이동. 다른 entry가 참조하면 409(`force=true`로 강행) |
+| `GET /api/v1/studio/entries/{id}/revisions`, `GET /{number}` | 발행 이력 |
+| `POST /api/v1/studio/entries/{id}/revisions/{number}/restore` | 이력을 초안으로 되돌리기 (`revision` 필요) |
+| `GET /api/v1/studio/trash`, `POST /trash/{id}/restore`, `DELETE /trash/{id}` | 휴지통 목록, 복원, 완전 삭제 (30일 후 자동 삭제) |
+| `GET /api/v1/studio/export`, `POST /api/v1/studio/import` (multipart `file`) | 전체 콘텐츠를 zip으로 내보내기 / 가져오기 |
 | `PUT/DELETE /api/v1/studio/entries/{id}/publication` | 발행 / 발행 취소 |
 | `PUT /api/v1/studio/blueprints/{key}/entries/order` | `{"entries": [id, ...]}` 순서대로 position을 한 번에 저장 (revision 유지) |
 | `POST /api/v1/studio/entries/{id}/preview` | 30분짜리 미리보기 토큰 발급 |
 | `POST /api/v1/studio/assets` (multipart `file`) | 이미지 업로드. 같은 파일이면 기존 asset 반환(200) |
-| `GET /api/v1/studio/assets`, `GET/DELETE /{id}` | asset 목록, 조회, 삭제(사용 중이면 409) |
+| `GET /api/v1/studio/assets?unused=`, `GET/DELETE /{id}` | asset 목록(안 쓰는 것만 보기), 조회, 삭제(사용 중이면 409) |
+| `POST /api/v1/studio/assets/cleanup` | 하루 넘게 어디에도 쓰이지 않은 asset 일괄 삭제 |
 
 ### 인증 (`/api/v1/studio/auth`)
 
@@ -92,6 +101,9 @@ entry 내용 안의 `"@entry:<ref>"`, `"@asset:<ref>"`는 가져오면서 실제
 | `POST /sign-in/password` | 이메일·비밀번호 로그인 |
 | `GET/PATCH /administrator` | 내 정보 조회, 표시 이름·이메일 변경 |
 | `PUT /password` | 비밀번호 설정·변경 (이미 있으면 `currentPassword` 필요, 바꾸면 다른 세션 종료) |
+| `DELETE /password` | 비밀번호 로그인 끄기 (`currentPassword`, 패스키가 있어야 함) |
+| `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions` | 로그인한 기기 목록, 특정 기기 / 다른 모든 기기 로그아웃 |
+| `GET /events` | 보안 기록 (로그인 성공·실패, 잠금, 비밀번호·이메일·패스키 변경 / 180일 보관) |
 | `POST /sign-out`, `GET /session` | 로그아웃, 현재 세션 |
 | `GET /passkeys`, `POST /passkeys/options`, `POST /passkeys`, `PATCH/DELETE /passkeys/{id}` | 기기(패스키) 관리 |
 

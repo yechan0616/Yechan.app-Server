@@ -10,11 +10,14 @@ import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import jakarta.persistence.Version
 import org.hibernate.annotations.ColumnTransformer
+import org.hibernate.annotations.SQLRestriction
 import tools.jackson.databind.node.ObjectNode
 import java.time.Instant
 
+// Trashed entries stay in the table for a while; every JPA query skips them.
 @Entity
 @Table(name = "entry")
+@SQLRestriction("deleted_at is null")
 class Entry(
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "blueprint_id", nullable = false, updatable = false)
@@ -77,6 +80,22 @@ class Entry(
         published = draft.deepCopy()
         publishedSlug = slug
         publishedAt = at
+    }
+
+    var deletedAt: Instant? = null
+        protected set
+
+    fun moveToTrash(at: Instant) {
+        unpublish()
+        deletedAt = at
+    }
+
+    fun restoreDraft(
+        slug: String?,
+        content: ObjectNode,
+    ) {
+        this.slug = slug
+        this.draft = content.deepCopy()
     }
 
     fun unpublish() {

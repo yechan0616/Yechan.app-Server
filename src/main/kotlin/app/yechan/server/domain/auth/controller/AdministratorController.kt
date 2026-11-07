@@ -3,10 +3,13 @@ package app.yechan.server.domain.auth.controller
 import app.yechan.server.domain.auth.dto.AdministratorPrincipal
 import app.yechan.server.domain.auth.dto.AdministratorResponse
 import app.yechan.server.domain.auth.dto.ChangePasswordRequest
+import app.yechan.server.domain.auth.dto.DisablePasswordRequest
 import app.yechan.server.domain.auth.dto.UpdateAdministratorRequest
 import app.yechan.server.domain.auth.service.AdministratorAccount
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PutMapping
@@ -28,11 +31,20 @@ class AdministratorController(
     fun update(
         @AuthenticationPrincipal principal: AdministratorPrincipal,
         @Valid @RequestBody request: UpdateAdministratorRequest,
-    ): AdministratorResponse = account.update(principal, request)
+        http: HttpServletRequest,
+    ): AdministratorResponse = account.update(principal, request, http.client())
 
     @PutMapping("/password")
     fun changePassword(
         @AuthenticationPrincipal principal: AdministratorPrincipal,
         @Valid @RequestBody request: ChangePasswordRequest,
-    ): AdministratorResponse = account.changePassword(principal, request)
+        http: HttpServletRequest,
+    ): AdministratorResponse = account.changePassword(principal, request, http.client())
+
+    @DeleteMapping("/password")
+    fun disablePassword(
+        @AuthenticationPrincipal principal: AdministratorPrincipal,
+        @Valid @RequestBody request: DisablePasswordRequest,
+        http: HttpServletRequest,
+    ): AdministratorResponse = account.disablePassword(principal, request, http.client())
 }

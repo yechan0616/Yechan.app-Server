@@ -9,14 +9,14 @@ import app.yechan.server.domain.content.dto.UpdateEntryRequest
 import app.yechan.server.domain.content.entity.Blueprint
 import app.yechan.server.domain.content.entity.BlueprintKind
 import app.yechan.server.domain.content.entity.Entry
+import app.yechan.server.domain.content.entity.EntryStatus
 import app.yechan.server.domain.content.exception.ContentErrorCode
 import app.yechan.server.domain.content.repository.EntryRepository
+import app.yechan.server.domain.content.repository.StudioQuery
 import app.yechan.server.domain.media.service.MediaAssets
 import app.yechan.server.global.common.response.PageResponse
 import app.yechan.server.global.error.BusinessException
 import app.yechan.server.global.error.FieldViolation
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import tools.jackson.databind.node.ObjectNode
@@ -30,6 +30,7 @@ class Entries(
     private val validator: ContentValidator,
     private val media: MediaAssets,
     private val previews: PreviewTokens,
+    private val revisions: Revisions,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -37,11 +38,13 @@ class Entries(
         blueprintKey: String,
         page: Int,
         size: Int,
+        search: String? = null,
+        status: EntryStatus? = null,
     ): PageResponse<EntryResponse> {
         val blueprint = blueprints.require(blueprintKey)
-        return PageResponse.of(entries.findAllByBlueprintId(blueprint.id, PageRequest.of(page, size, ORDER))) {
-            it.toResponse()
-        }
+        return PageResponse.of(
+            entries.findForStudio(StudioQuery(blueprint.id, search, status, page, size)),
+        ) { it.toResponse() }
     }
 
     @Transactional(readOnly = true)
@@ -104,6 +107,7 @@ class Entries(
             }
         }
         entry.publish(clock.instant())
+        revisions.record(entry)
         return entries.saveAndFlush(entry).toResponse()
     }
 
@@ -115,7 +119,18 @@ class Entries(
     }
 
     @Transactional
-    fun delete(id: UUID) = entries.delete(require(id))
+    fun delete(
+        id: UUID,
+        force: Boolean = false,
+    ) {
+        val entry = require(id)
+        val referencing = entries.referencing(id, id.toString())
+        if (referencing.isNotEmpty() && !force) {
+            val violations = referencing.map { FieldViolation("referencedBy", "${it.blueprint}/${it.slug ?: it.id}") }
+            throw BusinessException(ContentErrorCode.ENTRY_REFERENCED, violations = violations)
+        }
+        entry.moveToTrash(clock.instant())
+    }
 
     @Transactional
     fun reorder(
@@ -134,17 +149,17 @@ class Entries(
     fun preview(id: UUID): PreviewLinkResponse =
         previews.issue(require(id).id).let { PreviewLinkResponse(it.token, it.expiresAt) }
 
-    private fun require(id: UUID): Entry =
+    fun require(id: UUID): Entry =
         entries.findWithBlueprint(id) ?: throw BusinessException(ContentErrorCode.ENTRY_NOT_FOUND)
 
-    private fun checkRevision(
+    fun checkRevision(
         entry: Entry,
         revision: Long,
     ) {
         if (entry.revision != revision) throw BusinessException(ContentErrorCode.ENTRY_REVISION_CONFLICT)
     }
 
-    private fun checkDraft(
+    fun checkDraft(
         blueprint: Blueprint,
         slug: String?,
         content: ObjectNode,
@@ -192,6 +207,8 @@ class Entries(
 
     private fun normalizeSlug(slug: String?): String? = slug?.trim()?.ifEmpty { null }
 
+    fun describe(entry: Entry): EntryResponse = entry.toResponse()
+
     private fun Entry.toResponse() =
         EntryResponse(
             id = id,
@@ -208,7 +225,6 @@ class Entries(
         )
 
     companion object {
-        val ORDER: Sort = Sort.by("position", "createdAt")
         private val SLUG = Regex("^(?=.{1,96}$)[a-z0-9]+(?:-[a-z0-9]+)*$")
     }
 }

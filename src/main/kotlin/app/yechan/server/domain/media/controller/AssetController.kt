@@ -1,6 +1,7 @@
 package app.yechan.server.domain.media.controller
 
 import app.yechan.server.domain.media.dto.AssetResponse
+import app.yechan.server.domain.media.dto.CleanupResponse
 import app.yechan.server.domain.media.service.MediaAssets
 import app.yechan.server.global.common.response.PageResponse
 import jakarta.validation.constraints.Max
@@ -28,6 +29,7 @@ class AssetController(
     fun upload(
         @RequestPart("file") file: MultipartFile,
     ): ResponseEntity<AssetResponse> {
+        assets.checkSize(file.size)
         val uploaded = assets.upload(file.bytes, file.originalFilename)
         return if (uploaded.created) {
             ResponseEntity.created(URI.create("/api/v1/studio/assets/${uploaded.asset.id}")).body(uploaded.asset)
@@ -40,7 +42,11 @@ class AssetController(
     fun list(
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "30") @Min(1) @Max(100) size: Int,
-    ): PageResponse<AssetResponse> = assets.list(page, size)
+        @RequestParam(defaultValue = "false") unused: Boolean,
+    ): PageResponse<AssetResponse> = if (unused) assets.unused(page, size) else assets.list(page, size)
+
+    @PostMapping("/cleanup")
+    fun cleanup(): CleanupResponse = CleanupResponse(assets.deleteUnused())
 
     @GetMapping("/{id}")
     fun get(

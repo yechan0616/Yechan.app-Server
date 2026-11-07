@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 class AuthHousekeeping(
     private val ceremonies: PasskeyCeremonies,
     private val sessions: StudioSessions,
+    private val events: SecurityEvents,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -17,6 +18,7 @@ class AuthHousekeeping(
     fun purgeExpired() {
         val ceremonyCount = ceremonies.purgeExpired()
         val sessionCount = sessions.purgeExpired()
+        events.purgeExpired()
         if (ceremonyCount + sessionCount > 0) {
             log.debug("Purged {} ceremonies and {} sessions", ceremonyCount, sessionCount)
         }

@@ -7,8 +7,8 @@ import app.yechan.server.domain.auth.dto.PasskeyCreationOptionsResponse
 import app.yechan.server.domain.auth.dto.PasskeyResponse
 import app.yechan.server.domain.auth.dto.RenamePasskeyRequest
 import app.yechan.server.domain.auth.service.PasskeyManagement
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
@@ -43,9 +42,9 @@ class PasskeyController(
     @ResponseStatus(HttpStatus.CREATED)
     fun completeEnrollment(
         @AuthenticationPrincipal principal: AdministratorPrincipal,
-        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
         @Valid @RequestBody request: CeremonyCompletionRequest,
-    ): PasskeyResponse = passkeys.completeEnrollment(principal, request, userAgent)
+        http: HttpServletRequest,
+    ): PasskeyResponse = passkeys.completeEnrollment(principal, request, http.client())
 
     @PatchMapping("/{passkeyId}")
     fun rename(
@@ -59,5 +58,6 @@ class PasskeyController(
     fun remove(
         @AuthenticationPrincipal principal: AdministratorPrincipal,
         @PathVariable passkeyId: UUID,
-    ) = passkeys.remove(principal, passkeyId)
+        http: HttpServletRequest,
+    ) = passkeys.remove(principal, passkeyId, http.client())
 }

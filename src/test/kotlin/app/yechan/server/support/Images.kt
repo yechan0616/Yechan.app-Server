@@ -37,14 +37,17 @@ object Images {
     fun webpExtended(
         width: Int,
         height: Int,
+        metadata: String? = null,
     ): ByteArray {
         val w = width - 1
         val h = height - 1
+        val flags = if (metadata != null) 0x0C else 0
         val data =
-            byteArrayOf(0, 0, 0, 0) +
+            byteArrayOf(flags.toByte(), 0, 0, 0) +
                 byteArrayOf((w and 0xFF).toByte(), ((w shr 8) and 0xFF).toByte(), ((w shr 16) and 0xFF).toByte()) +
                 byteArrayOf((h and 0xFF).toByte(), ((h shr 8) and 0xFF).toByte(), ((h shr 16) and 0xFF).toByte())
-        return riff("VP8X", data)
+        if (metadata == null) return riff(chunk("VP8X", data))
+        return riff(chunk("VP8X", data) + chunk("EXIF", metadata.toByteArray()) + chunk("XMP ", metadata.toByteArray()))
     }
 
     fun webpLossy(
@@ -61,9 +64,19 @@ object Images {
     private fun riff(
         chunk: String,
         data: ByteArray,
-    ): ByteArray {
-        val body = "WEBP".toByteArray() + chunk.toByteArray() + littleEndian(data.size) + data
+    ): ByteArray = riff(chunk(chunk, data))
+
+    private fun riff(chunks: ByteArray): ByteArray {
+        val body = "WEBP".toByteArray() + chunks
         return "RIFF".toByteArray() + littleEndian(body.size) + body
+    }
+
+    private fun chunk(
+        type: String,
+        data: ByteArray,
+    ): ByteArray {
+        val padding = if (data.size % 2 == 1) byteArrayOf(0) else ByteArray(0)
+        return type.toByteArray() + littleEndian(data.size) + data + padding
     }
 
     private fun littleEndian(value: Int) =

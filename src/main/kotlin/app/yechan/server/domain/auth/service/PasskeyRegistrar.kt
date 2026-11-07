@@ -1,5 +1,6 @@
 package app.yechan.server.domain.auth.service
 
+import app.yechan.server.domain.auth.dto.ClientContext
 import app.yechan.server.domain.auth.entity.Administrator
 import app.yechan.server.domain.auth.entity.Passkey
 import app.yechan.server.domain.auth.entity.PasskeyCeremony
@@ -21,7 +22,7 @@ class PasskeyRegistrar(
         administrator: Administrator,
         ceremony: PasskeyCeremony,
         credential: JsonNode,
-        userAgent: String?,
+        client: ClientContext,
     ): Passkey {
         val registration = relyingParty.verifyRegistration(credentialJson(credential), ceremony.challenge)
         if (passkeys.existsByCredentialId(registration.credentialId)) {
@@ -38,7 +39,7 @@ class PasskeyRegistrar(
                 signCount = registration.signCount,
                 userVerified = registration.userVerified,
                 backedUp = registration.backedUp,
-                label = ceremony.label ?: defaultLabel(userAgent),
+                label = ceremony.label ?: defaultLabel(client.userAgent),
             ),
         )
     }

@@ -2,10 +2,14 @@ package app.yechan.server.domain.auth.service
 
 import app.yechan.server.domain.auth.config.AuthProperties
 import app.yechan.server.domain.auth.dto.AdministratorPrincipal
+import app.yechan.server.domain.auth.dto.ClientContext
 import app.yechan.server.domain.auth.dto.SessionResponse
+import app.yechan.server.domain.auth.dto.SessionSummaryResponse
 import app.yechan.server.domain.auth.entity.Administrator
 import app.yechan.server.domain.auth.entity.StudioSession
+import app.yechan.server.domain.auth.exception.AuthErrorCode
 import app.yechan.server.domain.auth.repository.StudioSessionRepository
+import app.yechan.server.global.error.BusinessException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
@@ -25,7 +29,7 @@ class StudioSessions(
     @Transactional
     fun issue(
         administrator: Administrator,
-        userAgent: String?,
+        client: ClientContext,
     ): IssuedSession {
         val now = clock.instant()
         val token =
@@ -38,7 +42,8 @@ class StudioSessions(
                     administrator = administrator,
                     tokenHash = hash(token),
                     expiresAt = now.plus(properties.session.absoluteTimeout),
-                    userAgent = userAgent?.take(USER_AGENT_LENGTH),
+                    userAgent = client.userAgent?.take(USER_AGENT_LENGTH),
+                    ipAddress = client.ipAddress,
                     issuedAt = now,
                     idleTimeout = properties.session.idleTimeout,
                 ),
@@ -62,6 +67,35 @@ class StudioSessions(
 
     @Transactional
     fun revoke(sessionId: UUID) = repository.deleteById(sessionId)
+
+    @Transactional(readOnly = true)
+    fun list(principal: AdministratorPrincipal): List<SessionSummaryResponse> =
+        repository
+            .findAllByAdministratorIdOrderByLastSeenAtDesc(
+                principal.id,
+            ).filter { it.isActive(clock.instant()) }
+            .map {
+                SessionSummaryResponse(
+                    id = it.id,
+                    ipAddress = it.ipAddress,
+                    userAgent = it.userAgent,
+                    createdAt = checkNotNull(it.createdAt),
+                    lastSeenAt = it.lastSeenAt,
+                    expiresAt = minOf(it.expiresAt, it.idleExpiresAt),
+                    current = it.id == principal.sessionId,
+                )
+            }
+
+    @Transactional
+    fun revoke(
+        principal: AdministratorPrincipal,
+        sessionId: UUID,
+    ) {
+        val session =
+            repository.findByIdAndAdministratorId(sessionId, principal.id)
+                ?: throw BusinessException(AuthErrorCode.AUTH_SESSION_NOT_FOUND)
+        repository.delete(session)
+    }
 
     @Transactional
     fun revokeOthers(principal: AdministratorPrincipal): Int =

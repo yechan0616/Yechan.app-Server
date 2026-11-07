@@ -2,11 +2,13 @@ package app.yechan.server.domain.auth.service
 
 import app.yechan.server.domain.auth.dto.AdministratorPrincipal
 import app.yechan.server.domain.auth.dto.CeremonyCompletionRequest
+import app.yechan.server.domain.auth.dto.ClientContext
 import app.yechan.server.domain.auth.dto.EnrollmentOptionsRequest
 import app.yechan.server.domain.auth.dto.PasskeyCreationOptionsResponse
 import app.yechan.server.domain.auth.dto.PasskeyResponse
 import app.yechan.server.domain.auth.entity.CeremonyPurpose
 import app.yechan.server.domain.auth.entity.Passkey
+import app.yechan.server.domain.auth.entity.SecurityEventType
 import app.yechan.server.domain.auth.exception.AuthErrorCode
 import app.yechan.server.domain.auth.repository.AdministratorRepository
 import app.yechan.server.domain.auth.repository.PasskeyRepository
@@ -22,6 +24,7 @@ class PasskeyManagement(
     private val ceremonies: PasskeyCeremonies,
     private val relyingParty: PasskeyRelyingParty,
     private val registrar: PasskeyRegistrar,
+    private val events: SecurityEvents,
 ) {
     @Transactional(readOnly = true)
     fun list(principal: AdministratorPrincipal): List<PasskeyResponse> =
@@ -60,12 +63,14 @@ class PasskeyManagement(
     fun completeEnrollment(
         principal: AdministratorPrincipal,
         request: CeremonyCompletionRequest,
-        userAgent: String?,
+        client: ClientContext,
     ): PasskeyResponse {
         val ceremony = ceremonies.consume(request.ceremonyId, CeremonyPurpose.ENROLLMENT)
         if (ceremony.administratorId != principal.id) throw BusinessException(AuthErrorCode.AUTH_CEREMONY_INVALID)
         val administrator = administrators.findById(principal.id).orElseThrow()
-        return registrar.register(administrator, ceremony, request.credential, userAgent).toResponse()
+        val passkey = registrar.register(administrator, ceremony, request.credential, client)
+        events.record(SecurityEventType.PASSKEY_ADDED, principal.id, client, detail = passkey.label)
+        return passkey.toResponse()
     }
 
     @Transactional
@@ -79,6 +84,7 @@ class PasskeyManagement(
     fun remove(
         principal: AdministratorPrincipal,
         passkeyId: UUID,
+        client: ClientContext,
     ) {
         val passkey = find(principal, passkeyId)
         val administrator = administrators.findById(principal.id).orElseThrow()
@@ -86,6 +92,7 @@ class PasskeyManagement(
             throw BusinessException(AuthErrorCode.AUTH_LAST_PASSKEY)
         }
         passkeys.delete(passkey)
+        events.record(SecurityEventType.PASSKEY_REMOVED, principal.id, client, detail = passkey.label)
     }
 
     private fun find(

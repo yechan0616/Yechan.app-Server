@@ -9,5 +9,14 @@ import java.util.UUID
 class EntryAssetUsage(
     private val entries: EntryRepository,
 ) : AssetUsage {
-    override fun isInUse(assetId: UUID): Boolean = entries.mentions(assetId.toString())
+    override fun usedAmong(assetIds: Collection<UUID>): Set<UUID> =
+        if (assetIds.isEmpty()) {
+            emptySet()
+        } else {
+            entries
+                .mentionedAmong(
+                    assetIds.joinToString(","),
+                ).map(UUID::fromString)
+                .toSet()
+        }
 }

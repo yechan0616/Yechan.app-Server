@@ -13,3 +13,7 @@ data class AssetResponse(
     val filename: String?,
     val createdAt: Instant,
 )
+
+data class CleanupResponse(
+    val deleted: Int,
+)

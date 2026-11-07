@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
 import java.time.Clock
+import java.time.Duration
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -22,30 +23,38 @@ class MediaAssets(
     private val assets: AssetRepository,
     private val storage: AssetStorage,
     private val probe: ImageProbe,
+    private val stripper: MetadataStripper,
     private val properties: MediaProperties,
     private val usages: ObjectProvider<AssetUsage>,
     private val clock: Clock,
 ) {
+    fun checkSize(size: Long) {
+        if (size > properties.maxFileSize.toBytes()) throw BusinessException(MediaErrorCode.ASSET_TOO_LARGE)
+    }
+
     @Transactional
     fun upload(
-        bytes: ByteArray,
+        original: ByteArray,
         filename: String?,
     ): UploadedAsset {
-        if (bytes.isEmpty()) throw BusinessException(MediaErrorCode.ASSET_EMPTY)
-        if (bytes.size > properties.maxFileSize.toBytes()) throw BusinessException(MediaErrorCode.ASSET_TOO_LARGE)
-        val image = probe.inspect(bytes) ?: throw BusinessException(MediaErrorCode.ASSET_UNSUPPORTED_TYPE)
+        if (original.isEmpty()) throw BusinessException(MediaErrorCode.ASSET_EMPTY)
+        checkSize(original.size.toLong())
+        val image = probe.inspect(original) ?: throw BusinessException(MediaErrorCode.ASSET_UNSUPPORTED_TYPE)
         if (image.width !in 1..MAX_SIDE || image.height !in 1..MAX_SIDE ||
             image.width.toLong() * image.height > MAX_PIXELS
         ) {
             throw BusinessException(MediaErrorCode.ASSET_DIMENSIONS_INVALID)
         }
+        val stripped =
+            runCatching { stripper.strip(original, image.format) }.getOrNull()
+                ?: throw BusinessException(MediaErrorCode.ASSET_UNSUPPORTED_TYPE)
+        val bytes = stripped.bytes
 
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         assets.findBySha256(digest)?.let { return UploadedAsset(it.toResponse(), created = false) }
 
-        val key = "assets/${KEY_PREFIX.format(
-            clock.instant().atOffset(ZoneOffset.UTC),
-        )}/${UUID.randomUUID()}.${image.format.extension}"
+        val folder = KEY_PREFIX.format(clock.instant().atOffset(ZoneOffset.UTC))
+        val key = "assets/$folder/${UUID.randomUUID()}.${image.format.extension}"
         storage.put(key, bytes, image.format.contentType)
         try {
             val asset =
@@ -54,8 +63,8 @@ class MediaAssets(
                         storageKey = key,
                         contentType = image.format.contentType,
                         byteSize = bytes.size.toLong(),
-                        width = image.width,
-                        height = image.height,
+                        width = if (stripped.rotated) image.height else image.width,
+                        height = if (stripped.rotated) image.width else image.height,
                         sha256 = digest,
                         filename = sanitize(filename),
                     ),
@@ -65,6 +74,31 @@ class MediaAssets(
             runCatching { storage.delete(key) }
             throw ex
         }
+    }
+
+    @Transactional(readOnly = true)
+    fun unused(
+        page: Int,
+        size: Int,
+    ): PageResponse<AssetResponse> {
+        val all = assets.findAll().sortedByDescending { it.createdAt }
+        val used = usedAmong(all.map { it.id })
+        val unused = all.filterNot { it.id in used }
+        val slice = unused.drop(page * size).take(size).map { it.toResponse() }
+        return PageResponse(slice, page, size, unused.size.toLong(), (unused.size + size - 1) / size)
+    }
+
+    // Recent uploads are skipped: they may belong to an entry that is still being written.
+    @Transactional
+    fun deleteUnused(): Int {
+        val cutoff = clock.instant().minus(CLEANUP_GRACE)
+        val candidates = assets.findAll().filter { checkNotNull(it.createdAt).isBefore(cutoff) }
+        val used = usedAmong(candidates.map { it.id })
+        val targets = candidates.filterNot { it.id in used }
+        assets.deleteAll(targets)
+        assets.flush()
+        targets.forEach { runCatching { storage.delete(it.storageKey) } }
+        return targets.size
     }
 
     @Transactional(readOnly = true)
@@ -83,14 +117,28 @@ class MediaAssets(
     fun findAll(ids: Collection<UUID>): Map<UUID, AssetResponse> =
         if (ids.isEmpty()) emptyMap() else assets.findAllById(ids).associate { it.id to it.toResponse() }
 
+    @Transactional(readOnly = true)
+    fun all(): List<AssetResponse> = assets.findAll().sortedBy { it.createdAt }.map { it.toResponse() }
+
+    @Transactional(readOnly = true)
+    fun download(id: UUID): ByteArray = storage.get(require(id).storageKey)
+
     @Transactional
     fun delete(id: UUID) {
         val asset = require(id)
-        if (usages.orderedStream().anyMatch { it.isInUse(id) }) throw BusinessException(MediaErrorCode.ASSET_IN_USE)
+        if (usedAmong(listOf(id)).isNotEmpty()) throw BusinessException(MediaErrorCode.ASSET_IN_USE)
         assets.delete(asset)
         assets.flush()
         storage.delete(asset.storageKey)
     }
+
+    private fun usedAmong(ids: Collection<UUID>): Set<UUID> =
+        usages
+            .orderedStream()
+            .toList()
+            .flatMap {
+                it.usedAmong(ids)
+            }.toSet()
 
     private fun require(id: UUID): Asset =
         assets.findById(id).orElse(null) ?: throw BusinessException(MediaErrorCode.ASSET_NOT_FOUND)
@@ -118,6 +166,7 @@ class MediaAssets(
 
     private companion object {
         const val MAX_SIDE = 16_384
+        val CLEANUP_GRACE: Duration = Duration.ofDays(1)
         const val MAX_PIXELS = 100_000_000L
         const val MAX_FILENAME = 255
         val KEY_PREFIX: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM")

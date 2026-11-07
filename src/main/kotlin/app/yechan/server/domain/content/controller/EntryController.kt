@@ -6,11 +6,13 @@ import app.yechan.server.domain.content.dto.PreviewLinkResponse
 import app.yechan.server.domain.content.dto.PublishEntryRequest
 import app.yechan.server.domain.content.dto.ReorderEntriesRequest
 import app.yechan.server.domain.content.dto.UpdateEntryRequest
+import app.yechan.server.domain.content.entity.EntryStatus
 import app.yechan.server.domain.content.service.Entries
 import app.yechan.server.global.common.response.PageResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.Size
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -34,7 +36,9 @@ class EntryController(
         @PathVariable key: String,
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
-    ): PageResponse<EntryResponse> = entries.list(key, page, size)
+        @RequestParam(required = false) @Size(max = 100) q: String?,
+        @RequestParam(required = false) status: EntryStatus?,
+    ): PageResponse<EntryResponse> = entries.list(key, page, size, q, status)
 
     @PostMapping("/blueprints/{key}/entries")
     fun create(
@@ -73,8 +77,9 @@ class EntryController(
     @DeleteMapping("/entries/{id}")
     fun delete(
         @PathVariable id: UUID,
+        @RequestParam(defaultValue = "false") force: Boolean,
     ): ResponseEntity<Unit> {
-        entries.delete(id)
+        entries.delete(id, force)
         return ResponseEntity.noContent().build()
     }
 

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
+import java.time.Instant
 import java.util.UUID
 
 interface EntryRepository :
@@ -67,15 +68,68 @@ interface EntryRepository :
         id: UUID,
     ): Boolean
 
+    // Trashed entries and revisions count too, so restoring them never brings back a missing image.
     @Query(
         value = """
-            select exists(
-                select 1 from entry where strpos(draft::text, :id) > 0 or strpos(coalesce(published::text, ''), :id) > 0
-            )
+            select candidate from unnest(string_to_array(:ids, ',')) as candidate
+            where exists (
+                select 1 from entry e
+                where strpos(e.draft::text, candidate) > 0 or strpos(coalesce(e.published::text, ''), candidate) > 0
+            ) or exists (select 1 from entry_revision r where strpos(r.content::text, candidate) > 0)
             """,
         nativeQuery = true,
     )
-    fun mentions(id: String): Boolean
+    fun mentionedAmong(ids: String): List<String>
+
+    @Query(
+        value = """
+            select e.id as id, b.key as blueprint, e.slug as slug from entry e join blueprint b on b.id = e.blueprint_id
+            where e.deleted_at is null and e.id <> :id
+              and (strpos(e.draft::text, :token) > 0 or strpos(coalesce(e.published::text, ''), :token) > 0)
+            order by b.key, e.slug limit 20
+            """,
+        nativeQuery = true,
+    )
+    fun referencing(
+        id: UUID,
+        token: String,
+    ): List<EntryLink>
+
+    @Query(
+        value = """
+            select e.id as id, b.key as blueprint, e.slug as slug, e.deleted_at as deletedAt
+            from entry e join blueprint b on b.id = e.blueprint_id
+            where e.deleted_at is not null order by e.deleted_at desc
+            """,
+        countQuery = "select count(*) from entry where deleted_at is not null",
+        nativeQuery = true,
+    )
+    fun findTrash(pageable: Pageable): Page<TrashedEntry>
+
+    @Query(
+        value = """
+            select e.id as id, b.key as blueprint, e.slug as slug, e.deleted_at as deletedAt
+            from entry e join blueprint b on b.id = e.blueprint_id where e.id = :id and e.deleted_at is not null
+            """,
+        nativeQuery = true,
+    )
+    fun findTrashed(id: UUID): TrashedEntry?
+
+    @Modifying(clearAutomatically = true)
+    @Query(value = "update entry set deleted_at = null where id = :id and deleted_at is not null", nativeQuery = true)
+    fun restoreFromTrash(id: UUID): Int
+
+    @Modifying
+    @Query(value = "delete from entry where id = :id and deleted_at is not null", nativeQuery = true)
+    fun deleteFromTrash(id: UUID): Int
+
+    @Modifying
+    @Query(value = "delete from entry where deleted_at is not null and deleted_at < :before", nativeQuery = true)
+    fun purgeTrash(before: Instant): Int
+
+    @Modifying
+    @Query(value = "delete from entry where blueprint_id = :blueprintId and deleted_at is not null", nativeQuery = true)
+    fun purgeTrashOf(blueprintId: UUID): Int
 
     @Query(
         """
@@ -84,6 +138,19 @@ interface EntryRepository :
         """,
     )
     fun findReferences(ids: Collection<UUID>): List<EntryReference>
+}
+
+interface EntryLink {
+    val id: UUID
+    val blueprint: String
+    val slug: String?
+}
+
+interface TrashedEntry {
+    val id: UUID
+    val blueprint: String
+    val slug: String?
+    val deletedAt: Instant
 }
 
 interface EntryReference {
