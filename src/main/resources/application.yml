@@ -65,8 +65,10 @@ management:
 
 app:
   cors:
-    allowed-origins:
+    public-origins:
       - https://www.yechan.app
+      - https://studio.yechan.app
+    studio-origins:
       - https://studio.yechan.app
   content:
     locales:

@@ -56,17 +56,29 @@ class SecurityConfig(
                 it.anyRequest().hasRole(ADMINISTRATOR_ROLE)
             }.build()
 
+    // www and api share a site, so www must never be allowed to call the studio API with the session cookie.
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
-        val configuration =
+        val public =
             CorsConfiguration().apply {
-                allowedOrigins = corsProperties.allowedOrigins
+                allowedOrigins = corsProperties.publicOrigins
+                allowedMethods = listOf("GET", "HEAD", "OPTIONS")
+                allowedHeaders = listOf("Accept-Language")
+                allowCredentials = false
+                maxAge = 3600
+            }
+        val studio =
+            CorsConfiguration().apply {
+                allowedOrigins = corsProperties.studioOrigins
                 allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 allowedHeaders = listOf("Content-Type", "Accept-Language", SETUP_TOKEN_HEADER)
                 allowCredentials = true
                 maxAge = 3600
             }
-        return UrlBasedCorsConfigurationSource().apply { registerCorsConfiguration("/api/**", configuration) }
+        return UrlBasedCorsConfigurationSource().apply {
+            registerCorsConfiguration("/api/v1/public/**", public)
+            registerCorsConfiguration("/api/v1/studio/**", studio)
+        }
     }
 
     companion object {

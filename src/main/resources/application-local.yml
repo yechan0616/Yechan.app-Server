@@ -12,8 +12,10 @@ springdoc:
 
 app:
   cors:
-    allowed-origins:
+    public-origins:
       - http://localhost:3000
+      - http://localhost:3001
+    studio-origins:
       - http://localhost:3001
   media:
     public-base-url: http://localhost:9090/yechan-media

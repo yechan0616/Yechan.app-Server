@@ -49,6 +49,27 @@ class SecurityConfigTest(
             }.andExpect {
                 status { isOk() }
                 header { string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://www.yechan.app") }
+                header { doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS) }
+            }
+    }
+
+    @Test
+    fun `studio API는 studio Origin만 쿠키와 함께 허용하고 www Origin은 거부한다`() {
+        mockMvc
+            .options("/api/v1/studio/probe") {
+                header(HttpHeaders.ORIGIN, "https://studio.yechan.app")
+                header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+            }.andExpect {
+                status { isOk() }
+                header { string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://studio.yechan.app") }
+                header { string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true") }
+            }
+        mockMvc
+            .options("/api/v1/studio/probe") {
+                header(HttpHeaders.ORIGIN, "https://www.yechan.app")
+                header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+            }.andExpect {
+                status { isForbidden() }
             }
     }
 

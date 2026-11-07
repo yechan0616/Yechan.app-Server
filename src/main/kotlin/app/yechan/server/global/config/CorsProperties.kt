@@ -4,10 +4,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 @ConfigurationProperties(prefix = "app.cors")
 data class CorsProperties(
-    val allowedOrigins: List<String>,
+    val publicOrigins: List<String>,
+    val studioOrigins: List<String>,
 ) {
     init {
-        require(allowedOrigins.isNotEmpty()) { "app.cors.allowed-origins must not be empty" }
-        require(allowedOrigins.none { it == "*" }) { "app.cors.allowed-origins must not contain a wildcard" }
+        check("public-origins", publicOrigins)
+        check("studio-origins", studioOrigins)
+    }
+
+    private fun check(
+        name: String,
+        origins: List<String>,
+    ) {
+        require(origins.isNotEmpty()) { "app.cors.$name must not be empty" }
+        require(origins.none { it == "*" }) { "app.cors.$name must not contain a wildcard" }
     }
 }
