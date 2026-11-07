@@ -95,6 +95,8 @@ data class TrashedEntryResponse(
     val id: UUID,
     val blueprint: String,
     val slug: String?,
+    val publishedSlug: String?,
+    val publishedAt: Instant?,
     val deletedAt: Instant,
     val purgeAt: Instant,
 )

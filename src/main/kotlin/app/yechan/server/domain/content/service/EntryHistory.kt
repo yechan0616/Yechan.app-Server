@@ -5,7 +5,6 @@ import app.yechan.server.domain.content.dto.RestoreRevisionRequest
 import app.yechan.server.domain.content.dto.RevisionResponse
 import app.yechan.server.domain.content.dto.RevisionSummaryResponse
 import app.yechan.server.domain.content.dto.TrashedEntryResponse
-import app.yechan.server.domain.content.entity.BlueprintKind
 import app.yechan.server.domain.content.exception.ContentErrorCode
 import app.yechan.server.domain.content.repository.EntryRepository
 import app.yechan.server.global.common.response.PageResponse
@@ -59,25 +58,26 @@ class EntryHistory(
         size: Int,
     ): PageResponse<TrashedEntryResponse> =
         PageResponse.of(repository.findTrash(PageRequest.of(page, size))) {
-            TrashedEntryResponse(it.id, it.blueprint, it.slug, it.deletedAt, it.deletedAt.plus(TRASH_RETENTION))
+            TrashedEntryResponse(
+                id = it.id,
+                blueprint = it.blueprint,
+                slug = it.slug,
+                publishedSlug = it.publishedSlug,
+                publishedAt = it.publishedAt,
+                deletedAt = it.deletedAt,
+                purgeAt = it.deletedAt.plus(TRASH_RETENTION),
+            )
         }
 
     @Transactional
     fun restoreFromTrash(id: UUID): EntryResponse {
         val trashed = repository.findTrashed(id) ?: throw BusinessException(ContentErrorCode.ENTRY_NOT_IN_TRASH)
         val blueprint = blueprints.require(trashed.blueprint)
-        if (blueprint.kind == BlueprintKind.SINGLETON && repository.countByBlueprintId(blueprint.id) > 0) {
-            throw BusinessException(ContentErrorCode.ENTRY_SINGLETON_EXISTS)
-        }
-        trashed.slug?.let { slug ->
-            if (repository.existsByBlueprintIdAndSlug(
-                    blueprint.id,
-                    slug,
-                )
-            ) {
-                throw BusinessException(ContentErrorCode.ENTRY_SLUG_TAKEN)
-            }
-        }
+        blueprints.requireSingletonVacant(blueprint)
+        val slugTaken =
+            trashed.slug?.let { repository.existsByBlueprintIdAndSlug(blueprint.id, it) } == true ||
+                trashed.publishedSlug?.let { repository.existsByBlueprintIdAndPublishedSlug(blueprint.id, it) } == true
+        if (slugTaken) throw BusinessException(ContentErrorCode.ENTRY_SLUG_TAKEN)
         repository.restoreFromTrash(id)
         return entries.get(id)
     }

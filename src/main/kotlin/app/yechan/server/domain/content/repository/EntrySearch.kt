@@ -55,7 +55,7 @@ class EntrySearchImpl(
         query.filters.forEachIndexed { index, filter ->
             parameters["k$index"] = filter.key
             parameters["v$index"] = filter.value
-            val field = if (filter.numeric) "(e.published ->> :k$index)::numeric" else "(e.published ->> :k$index)"
+            val field = if (filter.numeric) "try_numeric(e.published ->> :k$index)" else "(e.published ->> :k$index)"
             conditions += "$field = :v$index"
         }
 
@@ -63,11 +63,12 @@ class EntrySearchImpl(
         val orderParameters = mutableMapOf<String, Any>()
         query.sort?.let { sort ->
             orderParameters["sortKey"] = sort.key
+            // Field types may change after publishing; the try_* functions turn values that no longer cast into nulls.
             val expression =
                 when (sort.kind) {
                     SortKind.TEXT -> "(e.published ->> :sortKey)"
-                    SortKind.NUMBER -> "(e.published ->> :sortKey)::numeric"
-                    SortKind.TIMESTAMP -> "(e.published ->> :sortKey)::timestamptz"
+                    SortKind.NUMBER -> "try_numeric(e.published ->> :sortKey)"
+                    SortKind.TIMESTAMP -> "try_timestamptz(e.published ->> :sortKey)"
                 }
             order += "$expression ${if (sort.descending) "desc" else "asc"} nulls last"
         }

@@ -61,14 +61,33 @@ class EntryHistoryTest : IntegrationTest() {
         mockMvc.get("/api/v1/public/collections/note/toast").andExpect { status { isNotFound() } }
         get("/api/v1/studio/trash").andExpect {
             jsonPath("$.items[0].id") { value(entry.id) }
+            jsonPath("$.items[0].publishedSlug") { value("toast") }
             jsonPath("$.items[0].purgeAt") { exists() }
         }
 
         send { post("/api/v1/studio/trash/${entry.id}/restore") { auth() } }.andExpect {
-            jsonPath("$.status") { value("DRAFT") }
+            jsonPath("$.status") { value("PUBLISHED") }
             jsonPath("$.slug") { value("toast") }
         }
         get("/api/v1/studio/trash").andExpect { jsonPath("$.totalItems") { value(0) } }
+        mockMvc.get("/api/v1/public/collections/note/toast").andExpect {
+            status { isOk() }
+            jsonPath("$.content.title") { value("Toast") }
+        }
+    }
+
+    @Test
+    fun `휴지통에 있는 동안 같은 slug로 발행되었으면 복원하지 않는다`() {
+        define()
+        val old = publish(create("toast", """{"title":"Old"}"""))
+        send { delete("/api/v1/studio/entries/${old.id}") { auth() } }.andExpect { status { isNoContent() } }
+        publish(create("toast", """{"title":"New"}"""))
+
+        send { post("/api/v1/studio/trash/${old.id}/restore") { auth() } }.andExpect {
+            status { isConflict() }
+            jsonPath("$.code") { value("ENTRY_SLUG_TAKEN") }
+        }
+        mockMvc.get("/api/v1/public/collections/note/toast").andExpect { jsonPath("$.content.title") { value("New") } }
     }
 
     @Test

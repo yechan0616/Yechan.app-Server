@@ -68,6 +68,11 @@ interface EntryRepository :
         id: UUID,
     ): Boolean
 
+    fun existsByBlueprintIdAndPublishedSlug(
+        blueprintId: UUID,
+        publishedSlug: String,
+    ): Boolean
+
     // Trashed entries and revisions count too, so restoring them never brings back a missing image.
     @Query(
         value = """
@@ -97,7 +102,8 @@ interface EntryRepository :
 
     @Query(
         value = """
-            select e.id as id, b.key as blueprint, e.slug as slug, e.deleted_at as deletedAt
+            select e.id as id, b.key as blueprint, e.slug as slug, e.published_slug as publishedSlug,
+                   e.published_at as publishedAt, e.deleted_at as deletedAt
             from entry e join blueprint b on b.id = e.blueprint_id
             where e.deleted_at is not null order by e.deleted_at desc
             """,
@@ -108,7 +114,8 @@ interface EntryRepository :
 
     @Query(
         value = """
-            select e.id as id, b.key as blueprint, e.slug as slug, e.deleted_at as deletedAt
+            select e.id as id, b.key as blueprint, e.slug as slug, e.published_slug as publishedSlug,
+                   e.published_at as publishedAt, e.deleted_at as deletedAt
             from entry e join blueprint b on b.id = e.blueprint_id where e.id = :id and e.deleted_at is not null
             """,
         nativeQuery = true,
@@ -150,6 +157,8 @@ interface TrashedEntry {
     val id: UUID
     val blueprint: String
     val slug: String?
+    val publishedSlug: String?
+    val publishedAt: Instant?
     val deletedAt: Instant
 }
 

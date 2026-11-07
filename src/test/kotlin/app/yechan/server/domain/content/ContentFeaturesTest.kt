@@ -13,7 +13,12 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
 import tools.jackson.databind.JsonNode
+import tools.jackson.databind.node.ArrayNode
+import tools.jackson.databind.node.ObjectNode
 import java.util.UUID
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import kotlin.test.assertEquals
 
 class ContentFeaturesTest : IntegrationTest() {
     private val administrator =
@@ -52,6 +57,80 @@ class ContentFeaturesTest : IntegrationTest() {
         }
         public("/collections/history?filter[year]=1;drop table entry").andExpect {
             jsonPath("$.code") { value("ENTRY_QUERY_INVALID") }
+        }
+    }
+
+    @Test
+    fun `발행 뒤 필드 타입이 바뀌어도 공개 목록의 필터와 정렬은 실패하지 않는다`() {
+        defineHistory()
+        publish(create("history", "text", """{"year":2026,"title":"not a number"}"""))
+        publish(create("history", "number", """{"year":2026,"title":"7"}"""))
+        val blueprint = json(studio { get("/api/v1/studio/blueprints/history") { body("") } }) as ObjectNode
+        val fields = blueprint["fields"] as ArrayNode
+        (fields[1] as ObjectNode).put("type", "number")
+        studio {
+            put("/api/v1/studio/blueprints/history") {
+                body("""{"name":"History","kind":"collection","fields":$fields,"revision":${blueprint["revision"]}}""")
+            }
+        }.andExpect { status { isOk() } }
+
+        public("/collections/history?locale=en&sort=-title").andExpect {
+            status { isOk() }
+            jsonPath("$.items[0].slug") { value("number") }
+            jsonPath("$.items[1].slug") { value("text") }
+        }
+        public("/collections/history?locale=en&filter[title]=7").andExpect {
+            status { isOk() }
+            jsonPath("$.totalItems") { value(1) }
+        }
+
+        (fields[1] as ObjectNode).put("type", "datetime")
+        studio {
+            put("/api/v1/studio/blueprints/history") {
+                body(
+                    """{"name":"History","kind":"collection","fields":$fields,"revision":${blueprint["revision"].longValue() + 1}}""",
+                )
+            }
+        }.andExpect { status { isOk() } }
+        public("/collections/history?locale=en&sort=title").andExpect {
+            status { isOk() }
+            jsonPath("$.totalItems") { value(2) }
+        }
+    }
+
+    @Test
+    fun `singleton은 동시에 만들어도 하나만 생긴다`() {
+        studio {
+            post("/api/v1/studio/blueprints") {
+                body(
+                    """{"key":"site","name":"Site","kind":"singleton","fields":[{"key":"name","label":"Name","type":"string"}]}""",
+                )
+            }
+        }.andExpect { status { isCreated() } }
+        val attempts = 4
+        val barrier = CyclicBarrier(attempts)
+        val executor = Executors.newFixedThreadPool(attempts)
+        val statuses =
+            try {
+                (1..attempts)
+                    .map {
+                        executor.submit<Int> {
+                            barrier.await()
+                            studio {
+                                post(
+                                    "/api/v1/studio/blueprints/site/entries",
+                                ) { body("""{"content":{"name":"Site $it"}}""") }
+                            }.andReturn().response.status
+                        }
+                    }.map { it.get() }
+            } finally {
+                executor.shutdown()
+            }
+
+        assertEquals(1, statuses.count { it == 201 })
+        assertEquals(attempts - 1, statuses.count { it == 409 })
+        studio { get("/api/v1/studio/blueprints/site/entries") { body("") } }.andExpect {
+            jsonPath("$.totalItems") { value(1) }
         }
     }
 

@@ -4,12 +4,14 @@ import app.yechan.server.domain.content.dto.BlueprintResponse
 import app.yechan.server.domain.content.dto.CreateBlueprintRequest
 import app.yechan.server.domain.content.dto.UpdateBlueprintRequest
 import app.yechan.server.domain.content.entity.Blueprint
+import app.yechan.server.domain.content.entity.BlueprintKind
 import app.yechan.server.domain.content.entity.FieldDefinition
 import app.yechan.server.domain.content.exception.ContentErrorCode
 import app.yechan.server.domain.content.repository.BlueprintRepository
 import app.yechan.server.domain.content.repository.EntryRepository
 import app.yechan.server.global.error.BusinessException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 @Service
@@ -71,6 +73,17 @@ class Blueprints(
 
     fun require(key: String): Blueprint =
         blueprints.findByKey(key) ?: throw BusinessException(ContentErrorCode.BLUEPRINT_NOT_FOUND)
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun requireSingletonVacant(blueprint: Blueprint) {
+        if (blueprint.kind != BlueprintKind.SINGLETON) return
+        blueprints.lockById(blueprint.id)
+        if (entries.countByBlueprintId(blueprint.id) >
+            0
+        ) {
+            throw BusinessException(ContentErrorCode.ENTRY_SINGLETON_EXISTS)
+        }
+    }
 
     private fun validate(
         key: String,

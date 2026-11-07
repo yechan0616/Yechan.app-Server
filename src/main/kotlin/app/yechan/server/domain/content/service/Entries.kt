@@ -56,9 +56,7 @@ class Entries(
         request: CreateEntryRequest,
     ): EntryResponse {
         val blueprint = blueprints.require(blueprintKey)
-        if (blueprint.kind == BlueprintKind.SINGLETON && entries.countByBlueprintId(blueprint.id) > 0) {
-            throw BusinessException(ContentErrorCode.ENTRY_SINGLETON_EXISTS)
-        }
+        blueprints.requireSingletonVacant(blueprint)
         val slug = normalizeSlug(request.slug)
         checkDraft(blueprint, slug, request.content)
         if (slug != null &&

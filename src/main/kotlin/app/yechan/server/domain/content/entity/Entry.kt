@@ -85,8 +85,8 @@ class Entry(
     var deletedAt: Instant? = null
         protected set
 
+    // The publication is kept so a restore brings the public page back; trash is hidden by the deleted_at filters.
     fun moveToTrash(at: Instant) {
-        unpublish()
         deletedAt = at
     }
 
