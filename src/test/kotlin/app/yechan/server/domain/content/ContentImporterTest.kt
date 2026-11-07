@@ -21,7 +21,7 @@ class ContentImporterTest : IntegrationTest() {
     private lateinit var directory: Path
 
     @Test
-    fun `번들을 가져오면 참조와 이미지가 연결되고 다시 가져와도 중복되지 않는다`() {
+    fun `번들을 가져오면 앞뒤 참조와 이미지가 연결되고 다시 가져와도 중복되지 않는다`() {
         Files.createDirectories(directory.resolve("images"))
         Files.write(directory.resolve("images/cover.png"), Images.encode("png", 40, 20, seed = 9))
         Files.writeString(directory.resolve("bundle.json"), BUNDLE)
@@ -33,6 +33,9 @@ class ContentImporterTest : IntegrationTest() {
             jsonPath("$.content.title") { value("안녕") }
             jsonPath("$.content.cover.width") { value(40) }
             jsonPath("$.content.related.slug") { value("first") }
+        }
+        mockMvc.get("/api/v1/public/collections/note/first?locale=en").andExpect {
+            jsonPath("$.content.related.slug") { value("hello") }
         }
         mockMvc
             .get(
@@ -58,9 +61,9 @@ class ContentImporterTest : IntegrationTest() {
           ],
           "assets": [{"ref":"cover","file":"images/cover.png"}],
           "entries": [
-            {"ref":"first","blueprint":"note","slug":"first","content":{"title":{"en":"First"}}},
             {"ref":"hello","blueprint":"note","slug":"hello","position":1,
              "content":{"title":{"en":"Hello","ko":"안녕"},"cover":{"asset":"@asset:cover"},"related":"@entry:first"}},
+            {"ref":"first","blueprint":"note","slug":"first","content":{"title":{"en":"First"},"related":"@entry:hello"}},
             {"ref":"site","blueprint":"site","content":{"name":"Yechan"}}
           ]
         }

@@ -3,6 +3,15 @@ spring:
     name: yechan-server
   profiles:
     default: local
+  threads:
+    virtual:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
   autoconfigure:
     # No default in-memory user; authentication is passkey-only.
     exclude:
@@ -19,6 +28,9 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -27,6 +39,9 @@ spring:
 
 server:
   shutdown: graceful
+  compression:
+    enabled: true
+    min-response-size: 1KB
   error:
     include-stacktrace: never
     include-message: never

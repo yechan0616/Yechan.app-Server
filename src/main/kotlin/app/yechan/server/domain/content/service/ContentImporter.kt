@@ -10,7 +10,6 @@ import app.yechan.server.domain.content.dto.PublishEntryRequest
 import app.yechan.server.domain.content.dto.UpdateEntryRequest
 import app.yechan.server.domain.content.entity.BlueprintKind
 import app.yechan.server.domain.content.entity.FieldDefinition
-import app.yechan.server.domain.content.entity.FieldType
 import app.yechan.server.domain.content.repository.BlueprintRepository
 import app.yechan.server.domain.content.repository.EntryRepository
 import app.yechan.server.domain.media.service.MediaAssets
@@ -74,7 +73,7 @@ class ContentImporter(
                 ids[entry.ref] = existing
                 skipped++
             } else {
-                // References to entries created later are filled in once every entry exists.
+                // Forward references are filled in once every entry exists.
                 val content = resolve(entry.content, ids, assets, strict = false) as ObjectNode
                 val saved = entries.create(entry.blueprint, CreateEntryRequest(entry.slug, entry.position, content))
                 ids[entry.ref] = saved.id
@@ -84,25 +83,25 @@ class ContentImporter(
 
         created.forEach { (entry, saved) ->
             var current = saved
-
-            fun saveDraft(content: ObjectNode) {
+            val saveDraft = { content: ObjectNode ->
+                val resolved = resolve(content, ids, assets) as ObjectNode
                 current =
                     entries.update(
                         current.id,
-                        UpdateEntryRequest(
-                            entry.slug,
-                            entry.position,
-                            resolve(content, ids, assets) as ObjectNode,
-                            current.revision,
-                        ),
+                        UpdateEntryRequest(entry.slug, entry.position, resolved, current.revision),
                     )
             }
-            if (entry.publish) {
-                saveDraft(entry.published ?: entry.content)
-                current = entries.publish(current.id, PublishEntryRequest(current.revision))
-                if (entry.published != null) saveDraft(entry.content)
-            } else {
-                saveDraft(entry.content)
+            when {
+                entry.published != null -> {
+                    saveDraft(entry.published)
+                    current = entries.publish(current.id, PublishEntryRequest(current.revision))
+                    saveDraft(entry.content)
+                }
+
+                else -> {
+                    if (hasForwardReference(current.content)) saveDraft(entry.content)
+                    if (entry.publish) entries.publish(current.id, PublishEntryRequest(current.revision))
+                }
             }
         }
         return ImportReport(blueprintsCreated, assetsUploaded, created.size, skipped)
@@ -115,7 +114,7 @@ class ContentImporter(
             val known = blueprintRepository.findAllKeys()
             val ready =
                 pending.filter { request ->
-                    request.fields.flatMap(::targets).all {
+                    request.fields.flatMap { it.referencedBlueprints() }.all {
                         it == request.key ||
                             it in known
                     }
@@ -130,10 +129,12 @@ class ContentImporter(
         return createdCount
     }
 
-    private fun targets(field: FieldDefinition): List<String> =
-        (if (field.type == FieldType.REFERENCE) field.blueprints.orEmpty() else emptyList()) +
-            listOfNotNull(field.item).flatMap(::targets) +
-            field.fields.orEmpty().flatMap(::targets)
+    private fun hasForwardReference(node: JsonNode): Boolean =
+        when {
+            node.isString -> node.stringValue() == PENDING.toString()
+            node.isContainer -> node.values().any(::hasForwardReference)
+            else -> false
+        }
 
     private fun existingEntry(entry: BundleEntry): UUID? {
         val blueprint = blueprints.require(entry.blueprint)

@@ -5,7 +5,6 @@ import app.yechan.server.domain.content.dto.CreateBlueprintRequest
 import app.yechan.server.domain.content.dto.UpdateBlueprintRequest
 import app.yechan.server.domain.content.entity.Blueprint
 import app.yechan.server.domain.content.entity.FieldDefinition
-import app.yechan.server.domain.content.entity.FieldType
 import app.yechan.server.domain.content.exception.ContentErrorCode
 import app.yechan.server.domain.content.repository.BlueprintRepository
 import app.yechan.server.domain.content.repository.EntryRepository
@@ -59,7 +58,7 @@ class Blueprints(
         val blueprint = require(key)
         val referencedBy =
             blueprints.findAll().any { other ->
-                other.key != key && other.fields.any { it.refersTo(key) }
+                other.key != key && other.fields.any { key in it.referencedBlueprints() }
             }
         if (entries.countByBlueprintId(blueprint.id) > 0 ||
             referencedBy
@@ -87,11 +86,6 @@ class Blueprints(
             )
         }
     }
-
-    private fun FieldDefinition.refersTo(key: String): Boolean =
-        (type == FieldType.REFERENCE && key in blueprints.orEmpty()) ||
-            item?.refersTo(key) == true ||
-            fields.orEmpty().any { it.refersTo(key) }
 
     private fun Blueprint.toResponse() =
         BlueprintResponse(

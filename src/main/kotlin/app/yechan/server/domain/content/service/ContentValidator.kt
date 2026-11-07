@@ -70,11 +70,7 @@ class ContentValidator(
                 }
 
                 FieldType.OBJECT -> {
-                    if (value.isObject) {
-                        checkNotNull(
-                            field.fields,
-                        ).forEach { visit(it, value.get(it.key)) }
-                    }
+                    if (value.isObject) checkNotNull(field.fields).forEach { visit(it, value.get(it.key)) }
                 }
 
                 else -> {

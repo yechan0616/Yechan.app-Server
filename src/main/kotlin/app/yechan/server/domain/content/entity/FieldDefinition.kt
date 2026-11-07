@@ -26,6 +26,13 @@ data class FieldDefinition(
     val fields: List<FieldDefinition>? = null,
 ) {
     val effectiveMaxLength: Int? get() = type.lengthCap?.let { cap -> maxLength?.coerceAtMost(cap) ?: cap }
+
+    fun referencedBlueprints(): Set<String> =
+        buildSet {
+            if (type == FieldType.REFERENCE) addAll(blueprints.orEmpty())
+            item?.let { addAll(it.referencedBlueprints()) }
+            fields.orEmpty().forEach { addAll(it.referencedBlueprints()) }
+        }
 }
 
 enum class FieldType(

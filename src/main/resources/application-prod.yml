@@ -8,6 +8,12 @@ server:
   # Trust X-Forwarded-* from cloudflared on the private container network.
   forward-headers-strategy: native
 
+logging:
+  level:
+    root: info
+    org.hibernate: warn
+    software.amazon.awssdk: warn
+
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}

@@ -89,18 +89,13 @@ class ContentExporter(
             val next =
                 remaining
                     .filter { b ->
-                        b.fields.flatMap(::targets).all { it == b.key || it in done }
+                        b.fields.flatMap { it.referencedBlueprints() }.all { it == b.key || it in done }
                     }.ifEmpty { listOf(remaining.first()) }
             result += next
             remaining -= next.toSet()
         }
         return result
     }
-
-    private fun targets(field: FieldDefinition): List<String> =
-        (if (field.type == FieldType.REFERENCE) field.blueprints.orEmpty() else emptyList()) +
-            listOfNotNull(field.item).flatMap(::targets) +
-            field.fields.orEmpty().flatMap(::targets)
 
     private fun tokenize(
         fields: List<FieldDefinition>,
