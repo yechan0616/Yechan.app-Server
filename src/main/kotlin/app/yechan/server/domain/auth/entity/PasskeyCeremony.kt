@@ -19,6 +19,8 @@ class PasskeyCeremony(
     val challenge: ByteArray,
     @Column(nullable = false, updatable = false)
     val expiresAt: Instant,
+    @Column(length = 45, updatable = false)
+    val ipAddress: String? = null,
     @Column(updatable = false)
     val administratorId: UUID? = null,
     @Column(updatable = false)

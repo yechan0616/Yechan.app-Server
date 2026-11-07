@@ -36,7 +36,8 @@ class PasskeyController(
     fun beginEnrollment(
         @AuthenticationPrincipal principal: AdministratorPrincipal,
         @Valid @RequestBody request: EnrollmentOptionsRequest,
-    ): PasskeyCreationOptionsResponse = passkeys.beginEnrollment(principal, request)
+        http: HttpServletRequest,
+    ): PasskeyCreationOptionsResponse = passkeys.beginEnrollment(principal, request, http.client())
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

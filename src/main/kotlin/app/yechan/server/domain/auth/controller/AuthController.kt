@@ -49,7 +49,8 @@ class AuthController(
     fun beginOnboarding(
         @RequestHeader(SecurityConfig.SETUP_TOKEN_HEADER, required = false) setupToken: String?,
         @Valid @RequestBody request: OnboardingOptionsRequest,
-    ): PasskeyCreationOptionsResponse = onboarding.begin(setupToken, request)
+        http: HttpServletRequest,
+    ): PasskeyCreationOptionsResponse = onboarding.begin(setupToken, request, http.client())
 
     @PostMapping("/onboarding")
     fun completeOnboarding(
@@ -68,7 +69,7 @@ class AuthController(
         signedIn(HttpStatus.CREATED, onboarding.completeWithPassword(setupToken, request, http.client()))
 
     @PostMapping("/sign-in/options")
-    fun beginSignIn(): PasskeyRequestOptionsResponse = signIn.begin()
+    fun beginSignIn(http: HttpServletRequest): PasskeyRequestOptionsResponse = signIn.begin(http.client())
 
     @PostMapping("/sign-in")
     fun completeSignIn(

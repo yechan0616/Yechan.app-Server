@@ -1,6 +1,7 @@
 package app.yechan.server.domain.auth.service
 
 import app.yechan.server.domain.auth.config.AuthProperties
+import app.yechan.server.domain.auth.dto.ClientContext
 import app.yechan.server.domain.auth.entity.CeremonyPurpose
 import app.yechan.server.domain.auth.entity.PasskeyCeremony
 import app.yechan.server.domain.auth.exception.AuthErrorCode
@@ -18,10 +19,12 @@ class PasskeyCeremonies(
     private val properties: AuthProperties,
     private val clock: Clock,
 ) {
+    // Unauthenticated endpoints open ceremonies: one address gets a hard cap, the table as a whole recycles the oldest.
     @Transactional(propagation = Propagation.MANDATORY)
     fun open(
         purpose: CeremonyPurpose,
         challenge: ByteArray,
+        client: ClientContext,
         administratorId: UUID? = null,
         userHandle: ByteArray? = null,
         username: String? = null,
@@ -29,17 +32,23 @@ class PasskeyCeremonies(
         label: String? = null,
     ): PasskeyCeremony {
         val now = clock.instant()
-        // Unauthenticated endpoint: cap pending ceremonies.
-        if (repository.countByExpiresAtAfter(now) >=
-            MAX_PENDING
+        val ipAddress = client.ipAddress
+        if (ipAddress != null &&
+            repository.countByIpAddressAndExpiresAtAfter(ipAddress, now) >= MAX_PENDING_PER_ADDRESS
         ) {
             throw BusinessException(AuthErrorCode.AUTH_RATE_LIMITED)
+        }
+        val pending = repository.countByExpiresAtAfter(now)
+        if (pending >= MAX_PENDING) {
+            repository.deleteExpired(now)
+            repository.deleteOldest(pending - MAX_PENDING + 1)
         }
         return repository.save(
             PasskeyCeremony(
                 purpose = purpose,
                 challenge = challenge,
                 expiresAt = now.plus(properties.ceremonyTtl),
+                ipAddress = ipAddress,
                 administratorId = administratorId,
                 userHandle = userHandle,
                 username = username,
@@ -66,7 +75,8 @@ class PasskeyCeremonies(
 
     private fun invalid() = BusinessException(AuthErrorCode.AUTH_CEREMONY_INVALID)
 
-    private companion object {
+    companion object {
         const val MAX_PENDING = 500L
+        const val MAX_PENDING_PER_ADDRESS = 20L
     }
 }

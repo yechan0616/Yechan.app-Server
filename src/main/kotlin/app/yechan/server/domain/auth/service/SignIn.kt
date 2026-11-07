@@ -24,9 +24,9 @@ class SignIn(
     private val clock: Clock,
 ) {
     @Transactional
-    fun begin(): PasskeyRequestOptionsResponse {
+    fun begin(client: ClientContext): PasskeyRequestOptionsResponse {
         val challenge = relyingParty.newChallenge()
-        val ceremony = ceremonies.open(CeremonyPurpose.SIGN_IN, challenge)
+        val ceremony = ceremonies.open(CeremonyPurpose.SIGN_IN, challenge, client)
         return PasskeyRequestOptionsResponse(ceremony.id, relyingParty.requestOptions(challenge))
     }
 

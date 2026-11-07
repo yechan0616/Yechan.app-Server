@@ -34,6 +34,7 @@ class PasskeyManagement(
     fun beginEnrollment(
         principal: AdministratorPrincipal,
         request: EnrollmentOptionsRequest,
+        client: ClientContext,
     ): PasskeyCreationOptionsResponse {
         val administrator = administrators.findById(principal.id).orElseThrow()
         val challenge = relyingParty.newChallenge()
@@ -41,6 +42,7 @@ class PasskeyManagement(
             ceremonies.open(
                 purpose = CeremonyPurpose.ENROLLMENT,
                 challenge = challenge,
+                client = client,
                 administratorId = administrator.id,
                 userHandle = administrator.userHandle,
                 label = request.label?.trim()?.ifEmpty { null },

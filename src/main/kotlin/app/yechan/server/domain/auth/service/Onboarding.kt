@@ -42,6 +42,7 @@ class Onboarding(
     fun begin(
         setupToken: String?,
         request: OnboardingOptionsRequest,
+        client: ClientContext,
     ): PasskeyCreationOptionsResponse {
         authorize(setupToken)
         val existing = administrators.findByUsername(request.username)
@@ -52,6 +53,7 @@ class Onboarding(
             ceremonies.open(
                 purpose = CeremonyPurpose.ONBOARDING,
                 challenge = challenge,
+                client = client,
                 userHandle = userHandle,
                 username = request.username,
                 displayName = displayName,

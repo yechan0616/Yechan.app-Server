@@ -10,6 +10,11 @@ import java.util.UUID
 interface PasskeyCeremonyRepository : JpaRepository<PasskeyCeremony, UUID> {
     fun countByExpiresAtAfter(now: Instant): Long
 
+    fun countByIpAddressAndExpiresAtAfter(
+        ipAddress: String,
+        now: Instant,
+    ): Long
+
     // Returns 1 only for the request that actually consumed the ceremony.
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from PasskeyCeremony c where c.id = :id")
@@ -18,4 +23,14 @@ interface PasskeyCeremonyRepository : JpaRepository<PasskeyCeremony, UUID> {
     @Modifying
     @Query("delete from PasskeyCeremony c where c.expiresAt <= :now")
     fun deleteExpired(now: Instant): Int
+
+    @Modifying
+    @Query(
+        value = """
+            delete from passkey_ceremony
+            where id in (select id from passkey_ceremony order by created_at asc, id asc limit :count)
+            """,
+        nativeQuery = true,
+    )
+    fun deleteOldest(count: Long): Int
 }
