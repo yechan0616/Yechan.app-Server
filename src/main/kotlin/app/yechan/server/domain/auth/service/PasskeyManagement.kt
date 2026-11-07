@@ -81,7 +81,10 @@ class PasskeyManagement(
         passkeyId: UUID,
     ) {
         val passkey = find(principal, passkeyId)
-        if (passkeys.countByAdministratorId(principal.id) <= 1) throw BusinessException(AuthErrorCode.AUTH_LAST_PASSKEY)
+        val administrator = administrators.findById(principal.id).orElseThrow()
+        if (passkeys.countByAdministratorId(principal.id) <= 1 && !administrator.passwordEnabled) {
+            throw BusinessException(AuthErrorCode.AUTH_LAST_PASSKEY)
+        }
         passkeys.delete(passkey)
     }
 

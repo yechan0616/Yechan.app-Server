@@ -4,11 +4,25 @@ spring:
       file: deploy/compose.local.yaml
       lifecycle-management: start-only
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
 app:
   cors:
     allowed-origins:
       - http://localhost:3000
       - http://localhost:3001
+  media:
+    public-base-url: http://localhost:9090/yechan-media
+    storage:
+      endpoint: http://localhost:9090
+      region: us-east-1
+      access-key-id: local
+      secret-access-key: local
+      create-bucket: true
   auth:
     relying-party:
       id: localhost

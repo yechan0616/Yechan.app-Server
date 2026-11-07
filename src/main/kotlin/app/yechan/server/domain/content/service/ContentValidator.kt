@@ -23,6 +23,7 @@ class ContentValidator(
         content: JsonNode,
         mode: Mode,
         references: Map<UUID, String> = emptyMap(),
+        assets: Set<UUID> = emptySet(),
     ): List<FieldViolation> {
         val violations = mutableListOf<FieldViolation>()
         if (!content.isObject) {
@@ -33,13 +34,24 @@ class ContentValidator(
             violations += FieldViolation(ROOT, "must be at most ${MAX_CONTENT_LENGTH / 1024} KB")
             return violations
         }
-        Walker(mode, references, violations).checkObject(fields, content, ROOT)
+        Walker(mode, references, assets, violations).checkObject(fields, content, ROOT)
         return violations
     }
 
     fun collectReferences(
         fields: List<FieldDefinition>,
         content: JsonNode?,
+    ): Set<UUID> = collect(fields, content, FieldType.REFERENCE)
+
+    fun collectAssets(
+        fields: List<FieldDefinition>,
+        content: JsonNode?,
+    ): Set<UUID> = collect(fields, content, FieldType.ASSET)
+
+    private fun collect(
+        fields: List<FieldDefinition>,
+        content: JsonNode?,
+        type: FieldType,
     ): Set<UUID> {
         val ids = mutableSetOf<UUID>()
 
@@ -49,8 +61,8 @@ class ContentValidator(
         ) {
             if (value == null || value.isNull) return
             when (field.type) {
-                FieldType.REFERENCE -> {
-                    value.takeIf { it.isString }?.let { parseUuid(it.stringValue()) }?.let(ids::add)
+                type -> {
+                    idOf(field, value)?.let(ids::add)
                 }
 
                 FieldType.LIST -> {
@@ -74,9 +86,18 @@ class ContentValidator(
         return ids
     }
 
+    private fun idOf(
+        field: FieldDefinition,
+        value: JsonNode,
+    ): UUID? {
+        val raw = if (field.type == FieldType.ASSET) value.get(ASSET_ID) else value
+        return raw?.takeIf { it.isString }?.let { parseUuid(it.stringValue()) }
+    }
+
     private inner class Walker(
         private val mode: Mode,
         private val references: Map<UUID, String>,
+        private val assets: Set<UUID>,
         private val violations: MutableList<FieldViolation>,
     ) {
         private val publishing = mode == Mode.PUBLISH
@@ -112,16 +133,7 @@ class ContentValidator(
             }
             when (field.type) {
                 FieldType.STRING, FieldType.TEXT, FieldType.MARKDOWN -> {
-                    if (field.localized) {
-                        checkLocalized(field, value, path)
-                    } else {
-                        checkText(
-                            field,
-                            value,
-                            path,
-                            field.required || isItem,
-                        )
-                    }
+                    checkTextField(field, value, path, isItem)
                 }
 
                 FieldType.NUMBER -> {
@@ -137,11 +149,17 @@ class ContentValidator(
                 }
 
                 FieldType.URL -> {
-                    checkFormatted(field, value, path, "must be an https URL or a path starting with /", ::isUrl)
+                    checkFormatted(
+                        field,
+                        value,
+                        path,
+                        "must be an https URL or a path starting with /",
+                        ::isUrl,
+                    )
                 }
 
                 FieldType.EMAIL -> {
-                    checkFormatted(field, value, path, "must be an email address") { EMAIL.matches(it) }
+                    checkFormatted(field, value, path, "must be an email address", EMAIL::matches)
                 }
 
                 FieldType.DATE -> {
@@ -149,18 +167,31 @@ class ContentValidator(
                 }
 
                 FieldType.DATETIME -> {
-                    checkFormatted(field, value, path, "must be an ISO-8601 date-time with offset", ::isDateTime)
+                    checkFormatted(
+                        field,
+                        value,
+                        path,
+                        "must be an ISO-8601 date-time with offset",
+                        ::isDateTime,
+                    )
                 }
 
                 FieldType.SELECT -> {
-                    checkFormatted(field, value, path, "must be one of ${field.options}") {
-                        it in
-                            field.options.orEmpty()
-                    }
+                    checkFormatted(
+                        field,
+                        value,
+                        path,
+                        "must be one of ${field.options}",
+                        field.options.orEmpty()::contains,
+                    )
                 }
 
                 FieldType.REFERENCE -> {
                     checkReference(field, value, path)
+                }
+
+                FieldType.ASSET -> {
+                    checkAsset(value, path)
                 }
 
                 FieldType.LIST -> {
@@ -168,16 +199,21 @@ class ContentValidator(
                 }
 
                 FieldType.OBJECT -> {
-                    if (value.isObject) {
-                        checkObject(
-                            checkNotNull(field.fields),
-                            value,
-                            path,
-                        )
-                    } else {
-                        fail(path, "must be an object")
-                    }
+                    checkNested(field, value, path)
                 }
+            }
+        }
+
+        private fun checkTextField(
+            field: FieldDefinition,
+            value: JsonNode,
+            path: String,
+            isItem: Boolean,
+        ) {
+            if (field.localized) {
+                checkLocalized(field, value, path)
+            } else {
+                checkText(field, value, path, mustNotBeBlank = field.required || isItem)
             }
         }
 
@@ -203,6 +239,7 @@ class ContentValidator(
             path: String,
         ) {
             if (!value.isObject) return fail(path, "must be an object keyed by locale ${locales.supported}")
+            val plain = field.copy(localized = false)
             value.properties().forEach { (locale, text) ->
                 when {
                     !locales.isSupported(
@@ -211,7 +248,7 @@ class ContentValidator(
 
                     text.isNull -> Unit
 
-                    else -> checkText(field.copy(localized = false), text, "$path.$locale", mustNotBeBlank = false)
+                    else -> checkText(plain, text, "$path.$locale", mustNotBeBlank = false)
                 }
             }
             if (publishing && field.required) {
@@ -240,7 +277,7 @@ class ContentValidator(
         ) {
             if (!value.isNumber) return fail(path, "must be a number")
             if (integral &&
-                (!value.isIntegralNumber || !value.canConvertToLong())
+                !(value.isIntegralNumber && value.canConvertToLong())
             ) {
                 return fail(path, "must be an integer")
             }
@@ -279,6 +316,23 @@ class ContentValidator(
             if (blueprint !in field.blueprints.orEmpty()) fail(path, "must refer to ${field.blueprints}")
         }
 
+        private fun checkAsset(
+            value: JsonNode,
+            path: String,
+        ) {
+            if (!value.isObject) return fail(path, "must be an object with an asset id")
+            value.propertyNames().filterNot { it == ASSET_ID || it == ASSET_ALT }.forEach {
+                fail(
+                    "$path.$it",
+                    "is not allowed",
+                )
+            }
+            val id = value.get(ASSET_ID)?.takeIf { it.isString }?.let { parseUuid(it.stringValue()) }
+            if (id == null) return fail("$path.$ASSET_ID", "must be an asset id")
+            value.get(ASSET_ALT)?.takeIf { !it.isNull }?.let { checkLocalized(ALT, it, "$path.$ASSET_ALT") }
+            if (publishing && id !in assets) fail("$path.$ASSET_ID", "refers to a missing asset")
+        }
+
         private fun checkList(
             field: FieldDefinition,
             value: JsonNode,
@@ -301,6 +355,22 @@ class ContentValidator(
             }
         }
 
+        private fun checkNested(
+            field: FieldDefinition,
+            value: JsonNode,
+            path: String,
+        ) {
+            if (value.isObject) {
+                checkObject(
+                    checkNotNull(field.fields),
+                    value,
+                    path,
+                )
+            } else {
+                fail(path, "must be an object")
+            }
+        }
+
         private fun fail(
             path: String,
             reason: String,
@@ -311,10 +381,13 @@ class ContentValidator(
 
     private companion object {
         const val ROOT = "content"
+        const val ASSET_ID = "asset"
+        const val ASSET_ALT = "alt"
         const val MAX_CONTENT_LENGTH = 512 * 1024
         const val MAX_LIST_SIZE = 1_000
         const val MAX_VIOLATIONS = 100
         val EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+        val ALT = FieldDefinition(type = FieldType.STRING, localized = true, maxLength = 300)
 
         fun parseUuid(value: String): UUID? =
             runCatching { UUID.fromString(value) }.getOrNull()?.takeIf {

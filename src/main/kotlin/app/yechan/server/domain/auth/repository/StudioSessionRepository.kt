@@ -12,6 +12,13 @@ interface StudioSessionRepository : JpaRepository<StudioSession, UUID> {
     fun findByTokenHash(tokenHash: ByteArray): StudioSession?
 
     @Modifying
+    @Query("delete from StudioSession s where s.administrator.id = :administratorId and s.id <> :keep")
+    fun deleteOthers(
+        administratorId: UUID,
+        keep: UUID,
+    ): Int
+
+    @Modifying
     @Query("delete from StudioSession s where s.expiresAt <= :now or s.idleExpiresAt <= :now")
     fun deleteExpired(now: Instant): Int
 }

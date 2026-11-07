@@ -1,10 +1,12 @@
 package app.yechan.server.domain.content.controller
 
 import app.yechan.server.domain.content.dto.LocalesResponse
+import app.yechan.server.domain.content.dto.PreviewEntryResponse
 import app.yechan.server.domain.content.dto.PublishedEntryResponse
 import app.yechan.server.domain.content.service.PublishedContent
 import app.yechan.server.global.common.response.PageResponse
 import app.yechan.server.global.i18n.ContentLocales
+import io.swagger.v3.oas.annotations.Parameter
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import org.springframework.http.CacheControl
@@ -34,8 +36,19 @@ class PublishedContentController(
         @RequestHeader(HttpHeaders.ACCEPT_LANGUAGE, required = false) acceptLanguage: String?,
         @RequestParam(defaultValue = "0") @Min(0) page: Int,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
-    ): ResponseEntity<PageResponse<PublishedEntryResponse>> =
-        localized(locale, acceptLanguage) { content.collection(key, it, page, size) }
+        @RequestParam(required = false) sort: String?,
+        @Parameter(hidden = true) @RequestParam parameters: Map<String, String>,
+    ): ResponseEntity<PageResponse<PublishedEntryResponse>> {
+        val filters =
+            parameters
+                .mapNotNull { (name, value) ->
+                    FILTER.matchEntire(name)?.let {
+                        it.groupValues[1] to
+                            value
+                    }
+                }.toMap()
+        return localized(locale, acceptLanguage) { content.collection(key, it, page, size, filters, sort) }
+    }
 
     @GetMapping("/collections/{key}/{slug}")
     fun entry(
@@ -51,6 +64,22 @@ class PublishedContentController(
         @RequestParam(required = false) locale: String?,
         @RequestHeader(HttpHeaders.ACCEPT_LANGUAGE, required = false) acceptLanguage: String?,
     ): ResponseEntity<PublishedEntryResponse> = localized(locale, acceptLanguage) { content.singleton(key, it) }
+
+    @GetMapping("/preview/{token}")
+    fun preview(
+        @PathVariable token: String,
+        @RequestParam(required = false) locale: String?,
+        @RequestHeader(HttpHeaders.ACCEPT_LANGUAGE, required = false) acceptLanguage: String?,
+    ): ResponseEntity<PreviewEntryResponse> {
+        val selected = locales.select(locale, acceptLanguage)
+        return ResponseEntity
+            .ok()
+            .cacheControl(CacheControl.noStore())
+            .header(HttpHeaders.CONTENT_LANGUAGE, selected)
+            .header("Referrer-Policy", "no-referrer")
+            .header("X-Robots-Tag", "noindex")
+            .body(content.preview(token, selected))
+    }
 
     // Only responses with an explicit ?locale= may be stored by shared caches.
     private fun <T : Any> localized(
@@ -76,5 +105,6 @@ class PublishedContentController(
                 .staleWhileRevalidate(Duration.ofDays(1))
                 .cachePublic()
         val PRIVATE: CacheControl = CacheControl.maxAge(Duration.ofMinutes(1)).cachePrivate()
+        val FILTER = Regex("^filter\\[([a-zA-Z0-9]{1,64})]$")
     }
 }

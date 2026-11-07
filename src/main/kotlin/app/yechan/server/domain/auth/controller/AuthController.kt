@@ -6,9 +6,12 @@ import app.yechan.server.domain.auth.dto.OnboardingOptionsRequest
 import app.yechan.server.domain.auth.dto.OnboardingStatusResponse
 import app.yechan.server.domain.auth.dto.PasskeyCreationOptionsResponse
 import app.yechan.server.domain.auth.dto.PasskeyRequestOptionsResponse
+import app.yechan.server.domain.auth.dto.PasswordOnboardingRequest
+import app.yechan.server.domain.auth.dto.PasswordSignInRequest
 import app.yechan.server.domain.auth.dto.SessionResponse
 import app.yechan.server.domain.auth.service.IssuedSession
 import app.yechan.server.domain.auth.service.Onboarding
+import app.yechan.server.domain.auth.service.PasswordSignIn
 import app.yechan.server.domain.auth.service.SignIn
 import app.yechan.server.domain.auth.service.StudioSessions
 import app.yechan.server.global.error.BusinessException
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController
 class AuthController(
     private val onboarding: Onboarding,
     private val signIn: SignIn,
+    private val passwordSignIn: PasswordSignIn,
     private val sessions: StudioSessions,
     private val cookies: SessionCookies,
 ) {
@@ -59,6 +63,20 @@ class AuthController(
         @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
         @Valid @RequestBody request: CeremonyCompletionRequest,
     ): ResponseEntity<SessionResponse> = signedIn(HttpStatus.OK, signIn.complete(request, userAgent))
+
+    @PostMapping("/onboarding/password")
+    fun completePasswordOnboarding(
+        @RequestHeader(SecurityConfig.SETUP_TOKEN_HEADER, required = false) setupToken: String?,
+        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
+        @Valid @RequestBody request: PasswordOnboardingRequest,
+    ): ResponseEntity<SessionResponse> =
+        signedIn(HttpStatus.CREATED, onboarding.completeWithPassword(setupToken, request, userAgent))
+
+    @PostMapping("/sign-in/password")
+    fun signInWithPassword(
+        @RequestHeader(HttpHeaders.USER_AGENT, required = false) userAgent: String?,
+        @Valid @RequestBody request: PasswordSignInRequest,
+    ): ResponseEntity<SessionResponse> = signedIn(HttpStatus.OK, passwordSignIn.signIn(request, userAgent))
 
     @PostMapping("/sign-out")
     fun signOut(

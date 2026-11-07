@@ -16,6 +16,8 @@ data class AdministratorResponse(
     val id: UUID,
     val username: String,
     val displayName: String,
+    val email: String?,
+    val passwordEnabled: Boolean,
 )
 
 data class PasskeyResponse(

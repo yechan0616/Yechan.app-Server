@@ -45,10 +45,13 @@ class SecurityConfig(
                         HttpMethod.POST,
                         "$AUTH/onboarding",
                         "$AUTH/onboarding/options",
+                        "$AUTH/onboarding/password",
+                        "$AUTH/sign-in/password",
                         "$AUTH/sign-in",
                         "$AUTH/sign-in/options",
                         "$AUTH/sign-out",
                     ).permitAll()
+                it.requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                 it.requestMatchers("/error").permitAll()
                 it.anyRequest().hasRole(ADMINISTRATOR_ROLE)
             }.build()

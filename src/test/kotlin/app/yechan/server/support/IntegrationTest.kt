@@ -28,7 +28,7 @@ abstract class IntegrationTest {
     @BeforeEach
     fun cleanDatabase() {
         jdbc.execute(
-            "truncate table studio_session, passkey_ceremony, passkey, administrator, entry, blueprint cascade",
+            "truncate table studio_session, passkey_ceremony, passkey, administrator, entry, blueprint, asset cascade",
         )
     }
 }

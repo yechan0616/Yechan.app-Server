@@ -7,6 +7,10 @@ spring:
     # No default in-memory user; authentication is passkey-only.
     exclude:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
   jpa:
     open-in-view: false
     hibernate:
@@ -26,6 +30,12 @@ server:
   error:
     include-stacktrace: never
     include-message: never
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
 
 management:
   endpoints:
@@ -47,6 +57,13 @@ app:
     locales:
       supported: [en, ko]
       default: en
+  media:
+    public-base-url: https://cdn.yechan.app
+    max-file-size: 20MB
+    storage:
+      region: auto
+      bucket: yechan-media
+      path-style: true
   auth:
     relying-party:
       id: yechan.app

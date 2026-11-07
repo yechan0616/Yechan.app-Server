@@ -1,4 +1,16 @@
+springdoc:
+  api-docs:
+    enabled: true
+
 app:
+  media:
+    max-file-size: 1MB
+    public-base-url: http://localhost:1/yechan-media
+    storage:
+      endpoint: http://localhost:1
+      region: us-east-1
+      access-key-id: test
+      secret-access-key: test
   auth:
     relying-party:
       id: localhost

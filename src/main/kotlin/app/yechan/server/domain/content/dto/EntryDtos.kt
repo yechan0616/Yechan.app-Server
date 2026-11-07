@@ -55,6 +55,24 @@ data class PublishedEntryResponse(
     val content: ObjectNode,
 )
 
+data class ReorderEntriesRequest(
+    @field:NotNull @field:Size(min = 1, max = 1_000)
+    val entries: List<UUID>,
+)
+
+data class PreviewLinkResponse(
+    val token: String,
+    val expiresAt: Instant,
+)
+
+data class PreviewEntryResponse(
+    val id: UUID,
+    val blueprint: String,
+    val slug: String?,
+    val revision: Long,
+    val content: ObjectNode,
+)
+
 data class LocalesResponse(
     val supported: List<String>,
     val default: String,

@@ -5,15 +5,18 @@ import app.yechan.server.domain.auth.dto.CeremonyCompletionRequest
 import app.yechan.server.domain.auth.dto.OnboardingOptionsRequest
 import app.yechan.server.domain.auth.dto.OnboardingStatusResponse
 import app.yechan.server.domain.auth.dto.PasskeyCreationOptionsResponse
+import app.yechan.server.domain.auth.dto.PasswordOnboardingRequest
 import app.yechan.server.domain.auth.entity.Administrator
 import app.yechan.server.domain.auth.entity.CeremonyPurpose
 import app.yechan.server.domain.auth.exception.AuthErrorCode
 import app.yechan.server.domain.auth.repository.AdministratorRepository
 import app.yechan.server.domain.auth.repository.PasskeyRepository
 import app.yechan.server.global.error.BusinessException
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
+import java.time.Clock
 
 @Service
 class Onboarding(
@@ -24,6 +27,9 @@ class Onboarding(
     private val relyingParty: PasskeyRelyingParty,
     private val registrar: PasskeyRegistrar,
     private val sessions: StudioSessions,
+    private val encoder: PasswordEncoder,
+    private val policy: PasswordPolicy,
+    private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
     fun status() = OnboardingStatusResponse(available = isOpen())
@@ -71,6 +77,27 @@ class Onboarding(
         return sessions.issue(administrator, userAgent)
     }
 
+    @Transactional
+    fun completeWithPassword(
+        setupToken: String?,
+        request: PasswordOnboardingRequest,
+        userAgent: String?,
+    ): IssuedSession {
+        authorize(setupToken)
+        val email = policy.normalizeEmail(request.email)
+        val violations = policy.check(request.password, email, request.username)
+        if (violations.isNotEmpty()) throw BusinessException(AuthErrorCode.AUTH_PASSWORD_WEAK, violations = violations)
+        val administrator =
+            administrators.findByUsername(request.username)
+                ?: Administrator(request.username, request.displayName.trim(), relyingParty.newUserHandle())
+        if (administrators.findByEmail(email)?.let { it.username != request.username } == true) {
+            throw BusinessException(AuthErrorCode.AUTH_EMAIL_TAKEN)
+        }
+        administrator.changeEmail(email)
+        administrator.changePassword(checkNotNull(encoder.encode(request.password)), clock.instant())
+        return sessions.issue(administrators.save(administrator), userAgent)
+    }
+
     private fun authorize(setupToken: String?) {
         val expected = properties.setupToken
         if (expected.isNullOrEmpty()) throw BusinessException(AuthErrorCode.AUTH_ONBOARDING_UNAVAILABLE)
@@ -80,7 +107,8 @@ class Onboarding(
         if (!isOpen()) throw BusinessException(AuthErrorCode.AUTH_ONBOARDING_UNAVAILABLE)
     }
 
-    private fun isOpen() = properties.onboardingEnabled && passkeys.count() == 0L
+    private fun isOpen() =
+        properties.onboardingEnabled && passkeys.count() == 0L && administrators.countByPasswordHashIsNotNull() == 0L
 
     private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
 }

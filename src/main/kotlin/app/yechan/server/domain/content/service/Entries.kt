@@ -2,13 +2,16 @@ package app.yechan.server.domain.content.service
 
 import app.yechan.server.domain.content.dto.CreateEntryRequest
 import app.yechan.server.domain.content.dto.EntryResponse
+import app.yechan.server.domain.content.dto.PreviewLinkResponse
 import app.yechan.server.domain.content.dto.PublishEntryRequest
+import app.yechan.server.domain.content.dto.ReorderEntriesRequest
 import app.yechan.server.domain.content.dto.UpdateEntryRequest
 import app.yechan.server.domain.content.entity.Blueprint
 import app.yechan.server.domain.content.entity.BlueprintKind
 import app.yechan.server.domain.content.entity.Entry
 import app.yechan.server.domain.content.exception.ContentErrorCode
 import app.yechan.server.domain.content.repository.EntryRepository
+import app.yechan.server.domain.media.service.MediaAssets
 import app.yechan.server.global.common.response.PageResponse
 import app.yechan.server.global.error.BusinessException
 import app.yechan.server.global.error.FieldViolation
@@ -25,6 +28,8 @@ class Entries(
     private val entries: EntryRepository,
     private val blueprints: Blueprints,
     private val validator: ContentValidator,
+    private val media: MediaAssets,
+    private val previews: PreviewTokens,
     private val clock: Clock,
 ) {
     @Transactional(readOnly = true)
@@ -88,9 +93,10 @@ class Entries(
         val slugViolations = slugViolations(blueprint, entry.slug)
         val referenceIds = validator.collectReferences(blueprint.fields, entry.draft)
         val references = entries.findReferences(referenceIds).associate { it.id to it.blueprint }
+        val assets = media.findAll(validator.collectAssets(blueprint.fields, entry.draft)).keys
         val violations =
             slugViolations +
-                validator.validate(blueprint.fields, entry.draft, ContentValidator.Mode.PUBLISH, references)
+                validator.validate(blueprint.fields, entry.draft, ContentValidator.Mode.PUBLISH, references, assets)
         if (violations.isNotEmpty()) throw BusinessException(ContentErrorCode.ENTRY_INVALID, violations = violations)
         entry.slug?.let { slug ->
             if (entries.existsByBlueprintIdAndPublishedSlugAndIdNot(blueprint.id, slug, id)) {
@@ -110,6 +116,23 @@ class Entries(
 
     @Transactional
     fun delete(id: UUID) = entries.delete(require(id))
+
+    @Transactional
+    fun reorder(
+        blueprintKey: String,
+        request: ReorderEntriesRequest,
+    ) {
+        val blueprint = blueprints.require(blueprintKey)
+        val ids = request.entries
+        if (ids.toSet().size != ids.size || entries.countByBlueprintIdAndIdIn(blueprint.id, ids) != ids.size.toLong()) {
+            throw BusinessException(ContentErrorCode.ENTRY_ORDER_INVALID)
+        }
+        ids.forEachIndexed { position, id -> entries.updatePosition(id, position) }
+    }
+
+    @Transactional(readOnly = true)
+    fun preview(id: UUID): PreviewLinkResponse =
+        previews.issue(require(id).id).let { PreviewLinkResponse(it.token, it.expiresAt) }
 
     private fun require(id: UUID): Entry =
         entries.findWithBlueprint(id) ?: throw BusinessException(ContentErrorCode.ENTRY_NOT_FOUND)

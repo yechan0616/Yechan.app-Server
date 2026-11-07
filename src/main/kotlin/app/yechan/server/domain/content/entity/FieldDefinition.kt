@@ -44,6 +44,7 @@ enum class FieldType(
     DATETIME,
     SELECT,
     REFERENCE,
+    ASSET,
     LIST,
     OBJECT,
     ;

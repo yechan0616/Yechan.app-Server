@@ -2,7 +2,9 @@ package app.yechan.server.domain.content.controller
 
 import app.yechan.server.domain.content.dto.CreateEntryRequest
 import app.yechan.server.domain.content.dto.EntryResponse
+import app.yechan.server.domain.content.dto.PreviewLinkResponse
 import app.yechan.server.domain.content.dto.PublishEntryRequest
+import app.yechan.server.domain.content.dto.ReorderEntriesRequest
 import app.yechan.server.domain.content.dto.UpdateEntryRequest
 import app.yechan.server.domain.content.service.Entries
 import app.yechan.server.global.common.response.PageResponse
@@ -42,6 +44,20 @@ class EntryController(
         val created = entries.create(key, request)
         return ResponseEntity.created(URI.create("/api/v1/studio/entries/${created.id}")).body(created)
     }
+
+    @PutMapping("/blueprints/{key}/entries/order")
+    fun reorder(
+        @PathVariable key: String,
+        @Valid @RequestBody request: ReorderEntriesRequest,
+    ): ResponseEntity<Unit> {
+        entries.reorder(key, request)
+        return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/entries/{id}/preview")
+    fun preview(
+        @PathVariable id: UUID,
+    ): PreviewLinkResponse = entries.preview(id)
 
     @GetMapping("/entries/{id}")
     fun get(

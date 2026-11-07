@@ -18,6 +18,8 @@ java {
 }
 
 val webauthn4jVersion = "0.31.11.RELEASE"
+val awsSdkVersion = "2.57.1"
+val springdocVersion = "3.2.0"
 
 repositories {
     mavenCentral()
@@ -32,6 +34,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("com.webauthn4j:webauthn4j-core:$webauthn4jVersion")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
+    implementation(platform("software.amazon.awssdk:bom:$awsSdkVersion"))
+    implementation("software.amazon.awssdk:s3") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
     developmentOnly("org.springframework.boot:spring-boot-docker-compose")

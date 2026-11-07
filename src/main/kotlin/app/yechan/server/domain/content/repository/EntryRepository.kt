@@ -4,10 +4,13 @@ import app.yechan.server.domain.content.entity.Entry
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import java.util.UUID
 
-interface EntryRepository : JpaRepository<Entry, UUID> {
+interface EntryRepository :
+    JpaRepository<Entry, UUID>,
+    EntrySearch {
     @Query("select e from Entry e join fetch e.blueprint where e.id = :id")
     fun findWithBlueprint(id: UUID): Entry?
 
@@ -28,7 +31,24 @@ interface EntryRepository : JpaRepository<Entry, UUID> {
 
     fun findFirstByBlueprintId(blueprintId: UUID): Entry?
 
+    fun findByBlueprintIdAndSlug(
+        blueprintId: UUID,
+        slug: String,
+    ): Entry?
+
     fun countByBlueprintId(blueprintId: UUID): Long
+
+    fun countByBlueprintIdAndIdIn(
+        blueprintId: UUID,
+        ids: Collection<UUID>,
+    ): Long
+
+    @Modifying
+    @Query("update Entry e set e.position = :position where e.id = :id")
+    fun updatePosition(
+        id: UUID,
+        position: Int,
+    ): Int
 
     fun existsByBlueprintIdAndSlugAndIdNot(
         blueprintId: UUID,
@@ -46,6 +66,16 @@ interface EntryRepository : JpaRepository<Entry, UUID> {
         publishedSlug: String,
         id: UUID,
     ): Boolean
+
+    @Query(
+        value = """
+            select exists(
+                select 1 from entry where strpos(draft::text, :id) > 0 or strpos(coalesce(published::text, ''), :id) > 0
+            )
+            """,
+        nativeQuery = true,
+    )
+    fun mentions(id: String): Boolean
 
     @Query(
         """

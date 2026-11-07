@@ -2,6 +2,7 @@ package app.yechan.server.domain.content.service
 
 import app.yechan.server.domain.content.entity.FieldDefinition
 import app.yechan.server.domain.content.entity.FieldType
+import app.yechan.server.domain.media.dto.AssetResponse
 import org.springframework.stereotype.Component
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.node.JsonNodeFactory
@@ -22,12 +23,14 @@ class ContentRenderer {
         locale: String,
         defaultLocale: String,
         links: Map<UUID, LinkedEntry>,
-    ): ObjectNode = Renderer(locale, defaultLocale, links).renderObject(fields, content)
+        assets: Map<UUID, AssetResponse> = emptyMap(),
+    ): ObjectNode = Renderer(locale, defaultLocale, links, assets).renderObject(fields, content)
 
     private class Renderer(
         private val locale: String,
         private val defaultLocale: String,
         private val links: Map<UUID, LinkedEntry>,
+        private val assets: Map<UUID, AssetResponse>,
     ) {
         private val nodes = JsonNodeFactory.instance
 
@@ -53,6 +56,10 @@ class ContentRenderer {
                     renderLink(value)
                 }
 
+                field.type == FieldType.ASSET -> {
+                    renderAsset(value)
+                }
+
                 field.type == FieldType.LIST -> {
                     nodes.arrayNode().also { array ->
                         value.values().forEach { array.add(renderValue(checkNotNull(field.item), it)) }
@@ -73,6 +80,21 @@ class ContentRenderer {
             listOf(locale, defaultLocale)
                 .firstNotNullOfOrNull { tag -> value.get(tag)?.takeIf { it.isString && it.stringValue().isNotBlank() } }
                 ?: nodes.nullNode()
+
+        private fun renderAsset(value: JsonNode): JsonNode {
+            val id =
+                runCatching { UUID.fromString(value.get("asset")?.stringValue()) }.getOrNull()
+                    ?: return nodes.nullNode()
+            val asset = assets[id] ?: return nodes.nullNode()
+            val alt = value.get("alt")?.takeIf { it.isObject }?.let(::pickLocale) ?: nodes.nullNode()
+            return nodes
+                .objectNode()
+                .put("url", asset.url)
+                .put("width", asset.width)
+                .put("height", asset.height)
+                .put("contentType", asset.contentType)
+                .set("alt", alt)
+        }
 
         private fun renderLink(value: JsonNode): JsonNode {
             val id = runCatching { UUID.fromString(value.stringValue()) }.getOrNull() ?: return nodes.nullNode()

@@ -29,7 +29,16 @@ cp deploy/.env.example deploy/.env && chmod 600 deploy/.env
    - WAF → Rate limiting: `/api/v1/studio/auth/*` 경로에 IP당 분당 20회 정도
    - Cache Rules: `/api/v1/public/*`는 Origin Cache-Control 존중 (`?locale=` 응답만 공유 캐시된다)
 
-## 3. 실행
+## 3. 이미지 저장소 (R2)
+
+1. R2 → 버킷 생성: `yechan-media` (Standard)
+2. 버킷 → Settings → **Custom Domains**에 `cdn.yechan.app` 연결 (`r2.dev` 주소는 개발용이라 속도 제한이 있다)
+3. R2 API 토큰 발급: 이 버킷에 Object Read & Write
+4. `deploy/.env`에 `MEDIA_PUBLIC_BASE_URL=https://cdn.yechan.app`, `MEDIA_S3_ENDPOINT`, `MEDIA_S3_BUCKET`, 키 입력
+
+업로드된 파일은 `assets/YYYY/MM/<uuid>.<ext>`로 저장되고 `Cache-Control: immutable`이 붙는다. 파일을 바꾸면 새 주소가 생기므로 캐시를 지울 일이 없다.
+
+## 4. 실행
 
 ```bash
 docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build
@@ -40,21 +49,29 @@ curl https://api.yechan.app/actuator/health     # {"status":"UP",...}
 업데이트: `git pull && docker compose -f deploy/compose.yaml --env-file deploy/.env up -d --build`
 DB 마이그레이션(Flyway)은 api가 시작할 때 자동 적용된다.
 
-## 4. 첫 관리자 등록 (패스키)
+### 콘텐츠 번들 가져오기 (처음 한 번)
+
+```bash
+docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm \
+  -v "$PWD/seed/portfolio:/seed:ro" -e APP_SEED_BUNDLE=/seed api
+# 로그에 "Imported content bundle"이 보이면 Ctrl+C
+```
+
+## 5. 첫 관리자 등록 (패스키)
 
 1. `AUTH_SETUP_TOKEN`이 설정된 상태에서 studio의 온보딩 화면에 토큰을 입력하고 Touch ID로 패스키를 만든다.
    (`GET /api/v1/studio/auth/onboarding` → `available: true`일 때만 가능)
 2. 등록이 끝나면 `AUTH_SETUP_TOKEN=`을 비우고 `up -d`로 재시작한다. 패스키가 하나라도 있으면 온보딩은 자동으로 닫히지만, 토큰도 지워 두는 것이 안전하다.
 3. 다른 기기(iPhone 등)는 로그인한 상태에서 studio의 패스키 관리 화면에서 추가한다. iCloud 키체인으로 동기화된 패스키는 같은 Apple 계정의 기기에서 바로 쓸 수 있다.
 
-**패스키를 모두 잃어버린 경우**: 서버에서 패스키만 지우고 같은 username으로 다시 온보딩한다. 콘텐츠와 관리자 정보는 그대로 남는다.
+**로그인 수단을 모두 잃어버린 경우**: 비밀번호가 있으면 비밀번호로 로그인해 패스키를 다시 등록한다. 둘 다 없으면 서버에서 패스키와 비밀번호를 지우고 같은 username으로 다시 온보딩한다. 콘텐츠와 관리자 정보는 그대로 남는다.
 
 ```bash
-docker compose -f deploy/compose.yaml exec postgres psql -U yechan -d yechan -c "delete from passkey; delete from studio_session;"
+docker compose -f deploy/compose.yaml exec postgres psql -U yechan -d yechan -c "delete from passkey; delete from studio_session; update administrator set password_hash = null;"
 # AUTH_SETUP_TOKEN 다시 설정 → up -d → 온보딩
 ```
 
-## 5. 백업
+## 6. 백업
 
 `backup` 서비스가 매일 04:00 (KST)에 자동으로 수행한다.
 
@@ -98,7 +115,7 @@ docker compose -f deploy/compose.yaml start api tunnel
 $B rm /tmp/key
 ```
 
-## 6. 점검 목록
+## 7. 점검 목록
 
 - [ ] `docker compose ps`에서 모든 서비스가 healthy
 - [ ] `deploy/.env` 권한이 600이고 `AUTH_SETUP_TOKEN`이 비어 있음

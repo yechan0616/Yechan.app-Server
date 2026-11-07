@@ -15,6 +15,10 @@ enum class AuthErrorCode(
     AUTH_PASSKEY_NOT_FOUND(HttpStatus.NOT_FOUND, "Passkey was not found."),
     AUTH_LAST_PASSKEY(HttpStatus.CONFLICT, "The last passkey cannot be removed."),
     AUTH_SIGN_IN_FAILED(HttpStatus.UNAUTHORIZED, "Sign-in failed."),
+    AUTH_EMAIL_TAKEN(HttpStatus.CONFLICT, "Email is already in use."),
+    AUTH_EMAIL_REQUIRED(HttpStatus.BAD_REQUEST, "Set an email before enabling password sign-in."),
+    AUTH_PASSWORD_WEAK(HttpStatus.BAD_REQUEST, "Password does not meet the policy."),
+    AUTH_CURRENT_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect."),
     AUTH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many pending passkey ceremonies."),
     ;
 

@@ -2,7 +2,6 @@ package app.yechan.server.domain.auth.service
 
 import app.yechan.server.domain.auth.config.AuthProperties
 import app.yechan.server.domain.auth.dto.AdministratorPrincipal
-import app.yechan.server.domain.auth.dto.AdministratorResponse
 import app.yechan.server.domain.auth.dto.SessionResponse
 import app.yechan.server.domain.auth.entity.Administrator
 import app.yechan.server.domain.auth.entity.StudioSession
@@ -65,11 +64,15 @@ class StudioSessions(
     fun revoke(sessionId: UUID) = repository.deleteById(sessionId)
 
     @Transactional
+    fun revokeOthers(principal: AdministratorPrincipal): Int =
+        repository.deleteOthers(principal.id, principal.sessionId)
+
+    @Transactional
     fun purgeExpired(): Int = repository.deleteExpired(clock.instant())
 
     private fun StudioSession.toResponse() =
         SessionResponse(
-            administrator = AdministratorResponse(administrator.id, administrator.username, administrator.displayName),
+            administrator = administrator.toResponse(),
             expiresAt = minOf(expiresAt, idleExpiresAt),
         )
 
