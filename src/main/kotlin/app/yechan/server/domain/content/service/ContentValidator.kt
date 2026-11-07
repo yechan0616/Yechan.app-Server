@@ -392,6 +392,8 @@ class ContentValidator(
             }
 
         fun isUrl(value: String): Boolean {
+            // Browsers drop tabs and newlines before parsing, so "/\t/host" would become "//host".
+            if (value.any { it.isISOControl() }) return false
             // Browsers read "/\host" as "//host", so a second slash of either kind is a scheme-relative URL.
             if (value.startsWith("/")) return value.getOrNull(1) != '/' && value.getOrNull(1) != '\\'
             val uri = runCatching { URI(value) }.getOrNull() ?: return false
