@@ -18,6 +18,8 @@ import tools.jackson.databind.json.JsonMapper
 import tools.jackson.databind.node.JsonNodeFactory
 import tools.jackson.databind.node.ObjectNode
 import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 
 @Service
@@ -27,8 +29,20 @@ class ContentExporter(
     private val entries: EntryRepository,
     private val media: MediaAssets,
 ) {
+    // The bundle is written to a temporary file so streaming to a slow client does not hold a database connection.
     @Transactional(readOnly = true)
-    fun export(output: OutputStream) {
+    fun pack(): Path {
+        val file = Files.createTempFile("content-export", ".zip")
+        try {
+            Files.newOutputStream(file).use(::write)
+        } catch (ex: RuntimeException) {
+            Files.deleteIfExists(file)
+            throw ex
+        }
+        return file
+    }
+
+    private fun write(output: OutputStream) {
         val blueprintList = ordered(blueprints.findAllByOrderByNameAsc())
         val fields = blueprintList.associate { it.key to it.fields }
         val entryList = entries.findAll().sortedWith(compareBy({ it.blueprint.key }, { it.position }, { it.createdAt }))
