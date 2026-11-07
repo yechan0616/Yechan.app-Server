@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: yechan-server
+  profiles:
+    default: local
+  autoconfigure:
+    # No default in-memory user; authentication is passkey-only.
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: UTC
+
+server:
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+app:
+  cors:
+    allowed-origins:
+      - https://www.yechan.app
+      - https://studio.yechan.app
+  content:
+    locales:
+      supported: [en, ko]
+      default: en
+  auth:
+    relying-party:
+      id: yechan.app
+      name: yechan.app Studio
+      origins:
+        - https://studio.yechan.app
+    session:
+      cookie-name: __Host-studio_session
+      secure-cookie: true
+      idle-timeout: 7d
+      absolute-timeout: 30d
+    ceremony-ttl: 5m

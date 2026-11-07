@@ -1,0 +1,12 @@
+name: yechan-local
+
+services:
+  postgres:
+    image: 'postgres:18-alpine'
+    environment:
+      - 'POSTGRES_DB=yechan'
+      - 'POSTGRES_USER=yechan'
+      - 'POSTGRES_PASSWORD=yechan-local'
+      - 'TZ=UTC'
+    ports:
+      - '5432'

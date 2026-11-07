@@ -1,0 +1,10 @@
+app:
+  auth:
+    relying-party:
+      id: localhost
+      origins:
+        - http://localhost:3001
+    session:
+      cookie-name: studio_session
+      secure-cookie: false
+    setup-token: test-setup-token-0123456789abcdef0123

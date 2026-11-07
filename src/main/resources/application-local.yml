@@ -1,0 +1,21 @@
+spring:
+  docker:
+    compose:
+      file: deploy/compose.local.yaml
+      lifecycle-management: start-only
+
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:3001
+  auth:
+    relying-party:
+      id: localhost
+      origins:
+        - http://localhost:3001
+    session:
+      cookie-name: studio_session
+      secure-cookie: false
+    # Local development only.
+    setup-token: local-setup-token-change-me-0123456789
