@@ -34,6 +34,10 @@ data class PublishEntryRequest(
     val revision: Long,
 )
 
+data class UnpublishEntryRequest(
+    val revision: Long? = null,
+)
+
 data class EntryResponse(
     val id: UUID,
     val blueprint: String,

@@ -121,6 +121,28 @@ class ContentApiTest : IntegrationTest() {
     }
 
     @Test
+    fun `발행 취소는 revision을 보내면 충돌을 검사한다`() {
+        definePortfolio()
+        val project = publish(createEntry("project", """{"slug":"toast-acs","content":$PROJECT_CONTENT}"""))
+        studio {
+            delete("/api/v1/studio/entries/${project.id}/publication") {
+                jsonBody("""{"revision":${project.revision + 1}}""")
+            }
+        }.andExpect {
+            status { isConflict() }
+            jsonPath("$.code") { value("ENTRY_REVISION_CONFLICT") }
+        }
+        studio {
+            delete("/api/v1/studio/entries/${project.id}/publication") {
+                jsonBody("""{"revision":${project.revision}}""")
+            }
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value("DRAFT") }
+        }
+    }
+
+    @Test
     fun `참조 대상이 없거나 다른 Blueprint면 발행할 수 없다`() {
         definePortfolio()
         val profile = createEntry("profile", """{"content":{"name":"Yechan"}}""")

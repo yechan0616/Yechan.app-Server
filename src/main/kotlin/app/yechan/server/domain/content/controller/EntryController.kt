@@ -5,6 +5,7 @@ import app.yechan.server.domain.content.dto.EntryResponse
 import app.yechan.server.domain.content.dto.PreviewLinkResponse
 import app.yechan.server.domain.content.dto.PublishEntryRequest
 import app.yechan.server.domain.content.dto.ReorderEntriesRequest
+import app.yechan.server.domain.content.dto.UnpublishEntryRequest
 import app.yechan.server.domain.content.dto.UpdateEntryRequest
 import app.yechan.server.domain.content.entity.EntryStatus
 import app.yechan.server.domain.content.service.Entries
@@ -92,5 +93,6 @@ class EntryController(
     @DeleteMapping("/entries/{id}/publication")
     fun unpublish(
         @PathVariable id: UUID,
-    ): EntryResponse = entries.unpublish(id)
+        @Valid @RequestBody(required = false) request: UnpublishEntryRequest?,
+    ): EntryResponse = entries.unpublish(id, request?.revision)
 }
