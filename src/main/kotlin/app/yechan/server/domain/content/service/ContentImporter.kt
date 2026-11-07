@@ -70,7 +70,8 @@ class ContentImporter(
         val created = mutableListOf<Pair<BundleEntry, EntryResponse>>()
         var skipped = 0
         bundle.entries.forEach { entry ->
-            val existing = existingEntry(entry)
+            val preserved = preservedId(entry)
+            val existing = existingEntry(entry, preserved)
             if (existing != null) {
                 ids[entry.ref] = existing
                 skipped++
@@ -78,7 +79,7 @@ class ContentImporter(
                 // Forward references are filled in once every entry exists.
                 val content = resolve(entry.content, ids, assets, strict = false) as ObjectNode
                 val request = CreateEntryRequest(entry.slug, entry.position, content)
-                val saved = entries.create(entry.blueprint, request, preservedId(entry))
+                val saved = entries.create(entry.blueprint, request, preserved)
                 ids[entry.ref] = saved.id
                 created += entry to saved
             }
@@ -140,9 +141,17 @@ class ContentImporter(
         }
 
     // Exported bundles use entry ids as refs, so an entry keeps its id across servers and re-imports.
-    private fun existingEntry(entry: BundleEntry): UUID? {
+    private fun existingEntry(
+        entry: BundleEntry,
+        preserved: UUID?,
+    ): UUID? {
         val blueprint = blueprints.require(entry.blueprint)
-        preservedId(entry)?.takeIf { entryRepository.existsById(it) }?.let { return it }
+        preserved?.let(entryRepository::findWithBlueprint)?.let { found ->
+            require(found.blueprint.id == blueprint.id) {
+                "Entry ref '${entry.ref}' already belongs to blueprint '${found.blueprint.key}'"
+            }
+            return found.id
+        }
         return if (blueprint.kind == BlueprintKind.SINGLETON) {
             entryRepository.findFirstByBlueprintId(blueprint.id)?.id
         } else {
@@ -151,7 +160,7 @@ class ContentImporter(
     }
 
     private fun preservedId(entry: BundleEntry): UUID? =
-        runCatching { UUID.fromString(entry.ref) }.getOrNull()?.takeIf { entryRepository.findTrashed(it) == null }
+        parseUuid(entry.ref)?.takeIf { entryRepository.findTrashed(it) == null }
 
     private fun resolve(
         node: JsonNode,

@@ -385,12 +385,6 @@ class ContentValidator(
         val EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
         val ALT = FieldDefinition(type = FieldType.STRING, localized = true, maxLength = 300)
 
-        fun parseUuid(value: String): UUID? =
-            runCatching { UUID.fromString(value) }.getOrNull()?.takeIf {
-                it.toString() ==
-                    value.lowercase()
-            }
-
         fun isUrl(value: String): Boolean {
             // Browsers drop tabs and newlines before parsing, so "/\t/host" would become "//host".
             if (value.any { it.isISOControl() }) return false
@@ -417,3 +411,7 @@ class ContentValidator(
             }
     }
 }
+
+// UUID.fromString also accepts short forms such as "1-2-3-4-5"; only the canonical spelling counts as an id.
+internal fun parseUuid(value: String): UUID? =
+    runCatching { UUID.fromString(value) }.getOrNull()?.takeIf { it.toString() == value.lowercase() }

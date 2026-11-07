@@ -73,6 +73,33 @@ class ContentImporterTest : IntegrationTest() {
     }
 
     @Test
+    fun `ref가 다른 blueprint의 entry id면 번들을 거절한다`() {
+        val ref = UUID.randomUUID()
+        val fields = """[{"key":"title","label":"Title","type":"string"}]"""
+        Files.writeString(
+            directory.resolve("bundle.json"),
+            """
+            {
+              "blueprints": [{"key":"note","name":"Notes","kind":"collection","fields":$fields}],
+              "entries": [{"ref":"$ref","blueprint":"note","publish":false,"content":{"title":"Untitled"}}]
+            }
+            """,
+        )
+        assertEquals(ImportReport(1, 0, 1, 0), importer.import(directory))
+
+        Files.writeString(
+            directory.resolve("bundle.json"),
+            """
+            {
+              "blueprints": [{"key":"page","name":"Pages","kind":"collection","fields":$fields}],
+              "entries": [{"ref":"$ref","blueprint":"page","publish":false,"content":{"title":"Untitled"}}]
+            }
+            """,
+        )
+        assertThrows<IllegalArgumentException> { importer.import(directory) }
+    }
+
+    @Test
     fun `번들 밖의 파일은 읽지 않는다`() {
         Files.writeString(directory.resolve("bundle.json"), """{"assets":[{"ref":"x","file":"../../etc/passwd"}]}""")
         assertThrows<IllegalArgumentException> { importer.import(directory) }
