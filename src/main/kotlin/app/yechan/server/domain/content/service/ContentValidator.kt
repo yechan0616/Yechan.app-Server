@@ -392,7 +392,8 @@ class ContentValidator(
             }
 
         fun isUrl(value: String): Boolean {
-            if (value.startsWith("/")) return !value.startsWith("//")
+            // Browsers read "/\host" as "//host", so a second slash of either kind is a scheme-relative URL.
+            if (value.startsWith("/")) return value.getOrNull(1) != '/' && value.getOrNull(1) != '\\'
             val uri = runCatching { URI(value) }.getOrNull() ?: return false
             return uri.scheme == "https" && !uri.host.isNullOrBlank()
         }

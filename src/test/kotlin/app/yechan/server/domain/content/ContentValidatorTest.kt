@@ -94,8 +94,9 @@ class ContentValidatorTest {
         listOf("https://github.com/yechan", "/projects/toast").forEach {
             assertEquals(emptyMap(), check("""{$base,"repository":"$it"}""", Mode.PUBLISH), it)
         }
-        listOf("javascript:alert(1)", "//evil.example", "ftp://files.example").forEach {
-            assertEquals(setOf("content.repository"), check("""{$base,"repository":"$it"}""", Mode.PUBLISH).keys, it)
+        listOf("javascript:alert(1)", "//evil.example", "/\\evil.example", "ftp://files.example").forEach {
+            val encoded = Json.mapper.writeValueAsString(it)
+            assertEquals(setOf("content.repository"), check("""{$base,"repository":$encoded}""", Mode.PUBLISH).keys, it)
         }
     }
 
