@@ -19,7 +19,8 @@ class PasskeyCeremonies(
     private val properties: AuthProperties,
     private val clock: Clock,
 ) {
-    // Unauthenticated endpoints open ceremonies: one address gets a hard cap, the table as a whole recycles the oldest.
+    // Unauthenticated endpoints open ceremonies: one address gets a hard cap, and past the global cap the oldest
+    // anonymous ceremonies are recycled; an administrator's enrollment is never evicted by strangers.
     @Transactional(propagation = Propagation.MANDATORY)
     fun open(
         purpose: CeremonyPurpose,

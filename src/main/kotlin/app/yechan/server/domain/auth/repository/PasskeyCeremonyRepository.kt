@@ -28,7 +28,9 @@ interface PasskeyCeremonyRepository : JpaRepository<PasskeyCeremony, UUID> {
     @Query(
         value = """
             delete from passkey_ceremony
-            where id in (select id from passkey_ceremony order by created_at asc, id asc limit :count)
+            where id in (
+                select id from passkey_ceremony where administrator_id is null order by created_at asc, id asc limit :count
+            )
             """,
         nativeQuery = true,
     )
