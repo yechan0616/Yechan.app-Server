@@ -4,7 +4,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Id
 import jakarta.persistence.MappedSuperclass
 import jakarta.persistence.PostLoad
-import jakarta.persistence.PostPersist
+import jakarta.persistence.PrePersist
 import jakarta.persistence.Transient
 import org.hibernate.id.uuid.UuidVersion7Strategy
 import org.springframework.data.domain.Persistable
@@ -27,7 +27,8 @@ abstract class BaseEntity(
 
     override fun isNew(): Boolean = !persisted
 
-    @PostPersist
+    // PrePersist rather than PostPersist: isNew must flip inside persist(), or a delete before the flush is skipped.
+    @PrePersist
     @PostLoad
     protected fun markPersisted() {
         persisted = true
