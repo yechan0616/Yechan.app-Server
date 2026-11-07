@@ -54,7 +54,7 @@ class ContentExporter(
                             it.fields,
                         )
                     },
-                assets = assetList.map { BundleAsset(it.id.toString(), fileOf(it.id, it.contentType)) },
+                assets = assetList.map { BundleAsset(it.id.toString(), fileOf(it.id, it.contentType), it.filename) },
                 entries =
                     entryList.map { entry ->
                         BundleEntry(

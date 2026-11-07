@@ -12,6 +12,7 @@ data class ContentBundle(
 data class BundleAsset(
     val ref: String,
     val file: String,
+    val filename: String? = null,
 )
 
 data class BundleEntry(

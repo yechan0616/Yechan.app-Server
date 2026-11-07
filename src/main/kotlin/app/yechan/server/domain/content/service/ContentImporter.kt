@@ -59,7 +59,7 @@ class ContentImporter(
                 require(file.startsWith(root) && Files.isRegularFile(file)) {
                     "Asset file is outside the bundle or missing: ${asset.file}"
                 }
-                val uploaded = media.upload(Files.readAllBytes(file), file.fileName.toString())
+                val uploaded = media.upload(Files.readAllBytes(file), asset.filename ?: file.fileName.toString())
                 if (uploaded.created) assetsUploaded++
                 asset.ref to uploaded.asset.id
             }

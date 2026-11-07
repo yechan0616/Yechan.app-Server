@@ -61,6 +61,9 @@ class ContentTransferTest : IntegrationTest() {
         studio { get("/api/v1/studio/blueprints/post/entries?status=CHANGED") { auth() } }.andExpect {
             jsonPath("$.items[0].content.title") { value("Draft title") }
         }
+        studio { get("/api/v1/studio/assets") { auth() } }.andExpect {
+            jsonPath("$.items[0].filename") { value("cover.png") }
+        }
     }
 
     @Test
