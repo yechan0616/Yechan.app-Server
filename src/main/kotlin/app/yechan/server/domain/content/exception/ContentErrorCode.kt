@@ -10,7 +10,10 @@ enum class ContentErrorCode(
     BLUEPRINT_NOT_FOUND(HttpStatus.NOT_FOUND, "Blueprint was not found."),
     BLUEPRINT_ALREADY_EXISTS(HttpStatus.CONFLICT, "A blueprint with this key already exists."),
     BLUEPRINT_INVALID(HttpStatus.BAD_REQUEST, "Blueprint definition is invalid."),
-    BLUEPRINT_IN_USE(HttpStatus.CONFLICT, "Blueprint still has entries or is referenced by another blueprint."),
+    BLUEPRINT_IN_USE(
+        HttpStatus.CONFLICT,
+        "Blueprint still has entries, including the trash, or is referenced by another blueprint.",
+    ),
     BLUEPRINT_KIND_LOCKED(HttpStatus.CONFLICT, "Blueprint kind cannot change while it has entries."),
     BLUEPRINT_REVISION_CONFLICT(HttpStatus.CONFLICT, "Blueprint was changed by someone else."),
     ENTRY_NOT_FOUND(HttpStatus.NOT_FOUND, "Entry was not found."),

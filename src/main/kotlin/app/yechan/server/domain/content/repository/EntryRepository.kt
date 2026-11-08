@@ -134,9 +134,11 @@ interface EntryRepository :
     @Query(value = "delete from entry where deleted_at is not null and deleted_at < :before", nativeQuery = true)
     fun purgeTrash(before: Instant): Int
 
-    @Modifying
-    @Query(value = "delete from entry where blueprint_id = :blueprintId and deleted_at is not null", nativeQuery = true)
-    fun purgeTrashOf(blueprintId: UUID): Int
+    @Query(
+        value = "select count(*) from entry where blueprint_id = :blueprintId and deleted_at is not null",
+        nativeQuery = true,
+    )
+    fun countTrashOf(blueprintId: UUID): Long
 
     @Query(
         """

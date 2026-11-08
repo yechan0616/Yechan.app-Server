@@ -158,15 +158,18 @@ class EntryHistoryTest : IntegrationTest() {
     }
 
     @Test
-    fun `휴지통에만 entry가 남은 Blueprint는 삭제하면서 함께 비운다`() {
+    fun `휴지통에 entry가 남아 있는 Blueprint는 삭제할 수 없다`() {
         define()
         val entry = create("only", """{"title":"Only"}""")
         send {
             delete("/api/v1/studio/blueprints/note") { auth() }
         }.andExpect { jsonPath("$.code") { value("BLUEPRINT_IN_USE") } }
         send { delete("/api/v1/studio/entries/${entry.id}") { auth() } }
+        send {
+            delete("/api/v1/studio/blueprints/note") { auth() }
+        }.andExpect { jsonPath("$.code") { value("BLUEPRINT_IN_USE") } }
+        send { delete("/api/v1/studio/trash/${entry.id}") { auth() } }.andExpect { status { isNoContent() } }
         send { delete("/api/v1/studio/blueprints/note") { auth() } }.andExpect { status { isNoContent() } }
-        get("/api/v1/studio/trash").andExpect { jsonPath("$.totalItems") { value(0) } }
     }
 
     private data class Saved(

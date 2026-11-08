@@ -63,11 +63,11 @@ class Blueprints(
                 other.key != key && other.fields.any { key in it.referencedBlueprints() }
             }
         if (entries.countByBlueprintId(blueprint.id) > 0 ||
+            entries.countTrashOf(blueprint.id) > 0 ||
             referencedBy
         ) {
             throw BusinessException(ContentErrorCode.BLUEPRINT_IN_USE)
         }
-        entries.purgeTrashOf(blueprint.id)
         blueprints.delete(blueprint)
     }
 
