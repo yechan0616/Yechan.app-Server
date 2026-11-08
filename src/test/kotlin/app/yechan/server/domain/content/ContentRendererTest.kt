@@ -4,8 +4,10 @@ import app.yechan.server.domain.content.entity.FieldDefinition
 import app.yechan.server.domain.content.entity.FieldType
 import app.yechan.server.domain.content.service.ContentRenderer
 import app.yechan.server.domain.content.service.ContentRenderer.LinkedEntry
+import app.yechan.server.domain.media.dto.AssetResponse
 import app.yechan.server.global.common.json.Json
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -53,6 +55,33 @@ class ContentRendererTest {
         assertEquals("toast", result["project"]["slug"].stringValue())
         assertEquals("project", result["project"]["blueprint"].stringValue())
         assertTrue(result["draftOnly"].isNull)
+    }
+
+    @Test
+    fun `markdown 안의 asset 참조는 URL로 바뀌고 모르는 참조는 그대로 둔다`() {
+        val known = UUID.randomUUID()
+        val unknown = UUID.randomUUID()
+        val fields =
+            listOf(
+                FieldDefinition("body", "Body", FieldType.MARKDOWN, localized = true),
+                FieldDefinition("plain", "Plain", FieldType.MARKDOWN),
+            )
+        val content =
+            Json.mapper.readTree(
+                """
+                {"body":{"en":"![Cover](asset:$known \"Title\")\n\n![Gone](asset:$unknown)"},
+                 "plain":"[download]( asset:$known )"}
+                """,
+            )
+        val asset = AssetResponse(known, "https://cdn.example/x.png", "image/png", 1, 10, 10, null, Instant.EPOCH)
+
+        val result = renderer.render(fields, content, "en", "en", emptyMap(), mapOf(known to asset))
+
+        assertEquals(
+            "![Cover](https://cdn.example/x.png \"Title\")\n\n![Gone](asset:$unknown)",
+            result["body"].stringValue(),
+        )
+        assertEquals("[download]( https://cdn.example/x.png )", result["plain"].stringValue())
     }
 
     @Test

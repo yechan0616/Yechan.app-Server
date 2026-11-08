@@ -36,9 +36,19 @@ class ContentImporterTest : IntegrationTest() {
         assertEquals(ImportReport(2, 1, 3, 0), importer.import(directory))
         assertEquals(ImportReport(0, 0, 0, 3), importer.import(directory))
 
+        val coverUrl =
+            json
+                .readTree(
+                    mockMvc
+                        .get("/api/v1/public/collections/note/hello?locale=ko")
+                        .andReturn()
+                        .response.contentAsString,
+                )["content"]["cover"]["url"]
+                .stringValue()
         mockMvc.get("/api/v1/public/collections/note/hello?locale=ko").andExpect {
             jsonPath("$.content.title") { value("안녕") }
             jsonPath("$.content.cover.width") { value(40) }
+            jsonPath("$.content.body") { value("Intro\n\n![Cover]($coverUrl)") }
             jsonPath("$.content.related.slug") { value("first") }
         }
         mockMvc.get("/api/v1/public/collections/note/first?locale=en").andExpect {
@@ -112,13 +122,15 @@ class ContentImporterTest : IntegrationTest() {
             {"key":"note","name":"Notes","kind":"collection","fields":[
               {"key":"title","label":"Title","type":"string","required":true,"localized":true},
               {"key":"cover","label":"Cover","type":"asset"},
+              {"key":"body","label":"Body","type":"markdown"},
               {"key":"related","label":"Related","type":"reference","blueprints":["note"]}]},
             {"key":"site","name":"Site","kind":"singleton","fields":[{"key":"name","label":"Name","type":"string"}]}
           ],
           "assets": [{"ref":"cover","file":"images/cover.png"}],
           "entries": [
             {"ref":"hello","blueprint":"note","slug":"hello","position":1,
-             "content":{"title":{"en":"Hello","ko":"안녕"},"cover":{"asset":"@asset:cover"},"related":"@entry:first"}},
+             "content":{"title":{"en":"Hello","ko":"안녕"},"cover":{"asset":"@asset:cover"},"related":"@entry:first",
+                        "body":"Intro\n\n![Cover](asset:cover)"}},
             {"ref":"first","blueprint":"note","slug":"first","content":{"title":{"en":"First"},"related":"@entry:hello"}},
             {"ref":"site","blueprint":"site","content":{"name":"Yechan"}}
           ]

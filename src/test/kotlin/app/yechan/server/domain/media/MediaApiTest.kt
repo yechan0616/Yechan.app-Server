@@ -127,6 +127,70 @@ class MediaApiTest : IntegrationTest() {
     }
 
     @Test
+    fun `markdown 본문의 asset 참조는 발행 때 검사되고 공개 응답에서 URL로 바뀌며 사용 중으로 집계된다`() {
+        val asset =
+            json(upload(Images.encode("png", 64, 32, seed = 5), "diagram.png").andExpect { status { isCreated() } })
+        val id = asset["id"].stringValue()
+        studio {
+            post("/api/v1/studio/blueprints") {
+                body(
+                    """{"key":"post","name":"Posts","kind":"collection","fields":[
+                        {"key":"body","label":"Body","type":"markdown","localized":true}]}""",
+                )
+            }
+        }.andExpect { status { isCreated() } }
+
+        studio {
+            post("/api/v1/studio/blueprints/post/entries") {
+                body("""{"slug":"bad","content":{"body":{"en":"![x](asset:not-an-id)"}}}""")
+            }
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.errors[0].field") { value("content.body.en") }
+        }
+
+        val missing = UUID.randomUUID()
+        val entry =
+            json(
+                studio {
+                    post("/api/v1/studio/blueprints/post/entries") {
+                        body("""{"slug":"arch","content":{"body":{"en":"# Arch\n\n![Diagram](asset:$missing)"}}}""")
+                    }
+                },
+            )
+        val entryId = entry["id"].stringValue()
+        studio {
+            put("/api/v1/studio/entries/$entryId/publication") { body("""{"revision":${entry["revision"]}}""") }
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.errors[0].field") { value("content.body.en") }
+        }
+
+        val updated =
+            json(
+                studio {
+                    put("/api/v1/studio/entries/$entryId") {
+                        body(
+                            """{"slug":"arch","content":{"body":{"en":"# Arch\n\n![Diagram](asset:$id)"}},
+                               "revision":${entry["revision"]}}""",
+                        )
+                    }
+                },
+            )
+        studio {
+            put("/api/v1/studio/entries/$entryId/publication") { body("""{"revision":${updated["revision"]}}""") }
+        }.andExpect { status { isOk() } }
+
+        mockMvc.get("/api/v1/public/collections/post/arch?locale=en").andExpect {
+            jsonPath("$.content.body") { value("# Arch\n\n![Diagram](${asset["url"].stringValue()})") }
+        }
+        studio { delete("/api/v1/studio/assets/$id") { with(authentication(administrator)) } }
+            .andExpect { jsonPath("$.code") { value("ASSET_IN_USE") } }
+        studio { get("/api/v1/studio/assets?unused=true") { with(authentication(administrator)) } }
+            .andExpect { jsonPath("$.totalItems") { value(0) } }
+    }
+
+    @Test
     fun `없는 asset을 가리키면 발행할 수 없고 형식이 틀리면 초안부터 막는다`() {
         studio {
             post("/api/v1/studio/blueprints") {

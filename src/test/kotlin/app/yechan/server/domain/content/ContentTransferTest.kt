@@ -5,6 +5,7 @@ import app.yechan.server.domain.auth.service.StudioAuthentication
 import app.yechan.server.support.Images
 import app.yechan.server.support.IntegrationTest
 import org.hamcrest.Matchers.containsString
+import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
@@ -62,6 +63,9 @@ class ContentTransferTest : IntegrationTest() {
             }
 
         assertEquals(before, publicState())
+        mockMvc.get("/api/v1/public/collections/post/second?locale=en").andExpect {
+            jsonPath("$.content.body") { value(startsWith("![Cover](http")) }
+        }
         studio { get("/api/v1/studio/blueprints/post/entries?status=CHANGED") { auth() } }.andExpect {
             jsonPath("$.items[0].content.title") { value("Draft title") }
         }
@@ -114,6 +118,7 @@ class ContentTransferTest : IntegrationTest() {
                         {"key":"title","label":"Title","type":"string","required":true},
                         {"key":"author","label":"Author","type":"reference","blueprints":["author"]},
                         {"key":"cover","label":"Cover","type":"asset"},
+                        {"key":"body","label":"Body","type":"markdown"},
                         {"key":"links","label":"Links","type":"list","item":{"type":"object","fields":[
                           {"key":"to","label":"To","type":"reference","blueprints":["post"]}]}}]}""",
                 )
@@ -127,7 +132,7 @@ class ContentTransferTest : IntegrationTest() {
                 "post",
                 "second",
                 """{"title":"Published title","cover":{"asset":"${asset["id"].stringValue()}","alt":{"en":"Cover"}},
-                   "links":[{"to":"${first["id"].stringValue()}"}]}""",
+                   "body":"![Cover](asset:${asset["id"].stringValue()})","links":[{"to":"${first["id"].stringValue()}"}]}""",
                 publish = true,
             )
         studio {
@@ -158,6 +163,12 @@ class ContentTransferTest : IntegrationTest() {
             json.readTree(response.contentAsString)["items"].values().joinToString("|") { item ->
                 val content = item["content"].deepCopy() as ObjectNode
                 (content["cover"] as? ObjectNode)?.remove("url")
+                content["body"]?.takeIf { it.isString }?.let {
+                    content.put(
+                        "body",
+                        it.stringValue().replace(URL, "(url)"),
+                    )
+                }
                 "${item["id"].stringValue()}:${item["slug"].stringValue()}=$content"
             }
         }
@@ -223,5 +234,9 @@ class ContentTransferTest : IntegrationTest() {
         auth()
         contentType = MediaType.APPLICATION_JSON
         this.content = content
+    }
+
+    private companion object {
+        val URL = Regex("""\(https?://[^)]*\)""")
     }
 }

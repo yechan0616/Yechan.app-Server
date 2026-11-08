@@ -65,6 +65,10 @@ class ContentValidator(
                     idOf(field, value)?.let(ids::add)
                 }
 
+                FieldType.MARKDOWN -> {
+                    if (type == FieldType.ASSET) textsOf(value).forEach { ids += markdownAssetIds(it) }
+                }
+
                 FieldType.LIST -> {
                     if (value.isArray) value.values().forEach { visit(checkNotNull(field.item), it) }
                 }
@@ -89,6 +93,16 @@ class ContentValidator(
         val raw = if (field.type == FieldType.ASSET) value.get(ASSET_ID) else value
         return raw?.takeIf { it.isString }?.let { parseUuid(it.stringValue()) }
     }
+
+    private fun textsOf(value: JsonNode): List<String> =
+        when {
+            value.isString -> listOf(value.stringValue())
+            value.isObject -> value.values().filter { it.isString }.map { it.stringValue() }
+            else -> emptyList()
+        }
+
+    private fun markdownAssetIds(markdown: String): List<UUID> =
+        MarkdownAssets.references(markdown).mapNotNull(::parseUuid)
 
     private inner class Walker(
         private val mode: Mode,
@@ -227,6 +241,20 @@ class ContentValidator(
             }
             checkLength(field, text, path)
             field.pattern?.let { if (!Regex(it).matches(text)) fail(path, "must match $it") }
+            if (field.type == FieldType.MARKDOWN) checkMarkdownAssets(text, path)
+        }
+
+        private fun checkMarkdownAssets(
+            markdown: String,
+            path: String,
+        ) {
+            MarkdownAssets.references(markdown).forEach { reference ->
+                val id = parseUuid(reference)
+                when {
+                    id == null -> fail(path, "contains an invalid asset reference 'asset:$reference'")
+                    publishing && id !in assets -> fail(path, "refers to a missing asset 'asset:$id'")
+                }
+            }
         }
 
         private fun checkLocalized(

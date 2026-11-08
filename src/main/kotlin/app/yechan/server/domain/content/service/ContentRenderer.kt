@@ -49,7 +49,11 @@ class ContentRenderer {
             if (value == null || value.isNull) return nodes.nullNode()
             return when {
                 field.localized -> {
-                    pickLocale(value)
+                    pickLocale(value).let { if (field.type == FieldType.MARKDOWN) resolveMarkdown(it) else it }
+                }
+
+                field.type == FieldType.MARKDOWN -> {
+                    resolveMarkdown(value)
                 }
 
                 field.type == FieldType.REFERENCE -> {
@@ -80,6 +84,13 @@ class ContentRenderer {
             listOf(locale, defaultLocale)
                 .firstNotNullOfOrNull { tag -> value.get(tag)?.takeIf { it.isString && it.stringValue().isNotBlank() } }
                 ?: nodes.nullNode()
+
+        private fun resolveMarkdown(value: JsonNode): JsonNode {
+            if (!value.isString) return value
+            val resolved =
+                MarkdownAssets.rewrite(value.stringValue()) { reference -> parseUuid(reference)?.let(assets::get)?.url }
+            return nodes.stringNode(resolved)
+        }
 
         private fun renderAsset(value: JsonNode): JsonNode {
             val id =

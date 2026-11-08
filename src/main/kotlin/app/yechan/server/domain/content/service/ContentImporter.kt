@@ -198,6 +198,14 @@ class ContentImporter(
                 nodes.stringNode(requireNotNull(assets[ref]) { "Unknown asset ref '$ref'" }.toString())
             }
 
+            node.isString -> {
+                nodes.stringNode(
+                    MarkdownAssets.rewrite(node.stringValue()) { ref ->
+                        "asset:${requireNotNull(assets[ref] ?: parseUuid(ref)) { "Unknown asset ref '$ref'" }}"
+                    },
+                )
+            }
+
             else -> {
                 node
             }

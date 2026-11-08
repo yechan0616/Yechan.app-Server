@@ -114,6 +114,57 @@ class ContentValidatorTest {
     }
 
     @Test
+    fun `markdown 안의 asset 참조는 초안에서 형식을, 발행에서 존재를 검사한다`() {
+        val body = listOf(FieldDefinition("body", "Body", FieldType.MARKDOWN, localized = true))
+        val known = UUID.randomUUID()
+        val missing = UUID.randomUUID()
+
+        fun check(
+            markdown: String,
+            mode: Mode,
+        ) = validator
+            .validate(
+                body,
+                Json.mapper.readTree("""{"body":{"en":${Json.mapper.writeValueAsString(markdown)}}}"""),
+                mode,
+                assets = setOf(known),
+            ).map { it.field to it.reason }
+
+        assertEquals(emptyList(), check("![Cover](asset:$known) and [a link](https://yechan.app)", Mode.PUBLISH))
+        assertEquals(emptyList(), check("![Cover](asset:$missing)", Mode.DRAFT))
+        assertEquals(
+            listOf("content.body.en" to "refers to a missing asset 'asset:$missing'"),
+            check("![Cover](asset:$missing)", Mode.PUBLISH),
+        )
+        assertEquals(
+            listOf("content.body.en" to "contains an invalid asset reference 'asset:cover'"),
+            check("![Cover](asset:cover)", Mode.DRAFT),
+        )
+        assertEquals(emptyList(), check("the asset: is mentioned in prose, not as a destination", Mode.PUBLISH))
+    }
+
+    @Test
+    fun `asset id를 asset 필드와 markdown 본문에서 함께 모은다`() {
+        val fromField = UUID.randomUUID()
+        val fromMarkdown = UUID.randomUUID()
+        val nested = UUID.randomUUID()
+        val fields =
+            listOf(
+                FieldDefinition("cover", "Cover", FieldType.ASSET),
+                FieldDefinition("body", "Body", FieldType.MARKDOWN, localized = true),
+                FieldDefinition("notes", "Notes", FieldType.LIST, item = FieldDefinition(type = FieldType.MARKDOWN)),
+            )
+        val content =
+            Json.mapper.readTree(
+                """
+                {"cover":{"asset":"$fromField"},"body":{"en":"![a](asset:$fromMarkdown)","ko":"![b](asset:bad)"},
+                 "notes":["see ![c](asset:$nested)"]}
+                """,
+            )
+        assertEquals(setOf(fromField, fromMarkdown, nested), validator.collectAssets(fields, content))
+    }
+
+    @Test
     fun `참조 id를 중첩 구조에서도 모은다`() {
         val id = UUID.randomUUID()
         val target = FieldDefinition("target", "Target", FieldType.REFERENCE, blueprints = listOf("project"))
