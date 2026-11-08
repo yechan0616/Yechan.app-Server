@@ -91,7 +91,7 @@ class Onboarding(
         client: ClientContext,
     ): IssuedSession {
         authorize(setupToken)
-        val email = policy.normalizeEmail(request.email)
+        val email = policy.requireEmail(request.email)
         val violations = policy.check(request.password, email, request.username)
         if (violations.isNotEmpty()) throw BusinessException(AuthErrorCode.AUTH_PASSWORD_WEAK, violations = violations)
         val administrator =

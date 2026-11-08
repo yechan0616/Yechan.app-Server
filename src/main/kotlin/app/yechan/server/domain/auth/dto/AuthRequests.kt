@@ -1,6 +1,5 @@
 package app.yechan.server.domain.auth.dto
 
-import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
@@ -54,7 +53,7 @@ data class PasswordOnboardingRequest(
     val username: String,
     @field:NotBlank @field:Size(max = 100)
     val displayName: String,
-    @field:NotBlank @field:Email @field:Size(max = 254)
+    @field:NotBlank @field:Size(max = 254)
     val email: String,
     @field:NotBlank @field:Size(max = 128)
     val password: String,
@@ -63,7 +62,6 @@ data class PasswordOnboardingRequest(
 data class UpdateAdministratorRequest(
     @field:Size(min = 1, max = 100)
     val displayName: String? = null,
-    @field:Email @field:Size(min = 3, max = 254)
     val email: String? = null,
 )
 

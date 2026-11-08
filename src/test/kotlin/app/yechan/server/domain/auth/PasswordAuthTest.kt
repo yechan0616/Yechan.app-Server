@@ -112,6 +112,31 @@ class PasswordAuthTest : IntegrationTest() {
     }
 
     @Test
+    fun `이메일은 앞뒤 공백을 지우고 소문자로 저장하며 형식이 틀리면 400이다`() {
+        val session = onboardWithPasskey()
+
+        mockMvc
+            .patch("$AUTH/administrator") {
+                cookie(session)
+                json("""{"email":"  Me@Yechan.app  "}""")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.email") { value("me@yechan.app") }
+            }
+        listOf("not-an-email", "me@yechan", " @yechan.app ").forEach { email ->
+            mockMvc
+                .patch("$AUTH/administrator") {
+                    cookie(session)
+                    json("""{"email":"$email"}""")
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.code") { value("INVALID_INPUT") }
+                    jsonPath("$.errors[0].field") { value("email") }
+                }
+        }
+    }
+
+    @Test
     fun `비밀번호를 바꾸려면 현재 비밀번호가 필요하고 바꾸면 다른 세션은 끊긴다`() {
         val first = cookie(onboardWithPassword())
         val second = cookie(signIn("me@yechan.app", PASSWORD))

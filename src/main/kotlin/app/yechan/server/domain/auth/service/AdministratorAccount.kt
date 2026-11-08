@@ -41,7 +41,7 @@ class AdministratorAccount(
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?.let(administrator::rename)
-        request.email?.let(policy::normalizeEmail)?.let { email ->
+        request.email?.let(policy::requireEmail)?.let { email ->
             if (administrators.existsByEmailAndIdNot(
                     email,
                     administrator.id,

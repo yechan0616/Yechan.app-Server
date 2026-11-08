@@ -1,5 +1,7 @@
 package app.yechan.server.domain.auth.service
 
+import app.yechan.server.global.error.BusinessException
+import app.yechan.server.global.error.CommonErrorCode
 import app.yechan.server.global.error.FieldViolation
 import org.springframework.stereotype.Component
 
@@ -37,9 +39,23 @@ class PasswordPolicy {
 
     fun normalizeEmail(email: String): String = email.trim().lowercase()
 
+    fun requireEmail(raw: String): String {
+        val email = normalizeEmail(raw)
+        if (email.length !in EMAIL_MIN_LENGTH..EMAIL_MAX_LENGTH || !EMAIL.matches(email)) {
+            throw BusinessException(
+                CommonErrorCode.INVALID_INPUT,
+                violations = listOf(FieldViolation("email", "must be a well-formed email address")),
+            )
+        }
+        return email
+    }
+
     private companion object {
         const val MIN_LENGTH = 12
         const val MAX_LENGTH = 128
+        const val EMAIL_MIN_LENGTH = 3
+        const val EMAIL_MAX_LENGTH = 254
+        val EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
         val COMMON =
             setOf(
                 "password1234",
