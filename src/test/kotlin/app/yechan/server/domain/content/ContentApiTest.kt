@@ -116,14 +116,28 @@ class ContentApiTest : IntegrationTest() {
             jsonPath("$.items[0].content.project.slug") { value("toast-acs") }
             jsonPath("$.items[0].content.project.blueprint") { value("project") }
         }
-        studio { authDelete("/api/v1/studio/entries/${project.id}/publication") }.andExpect { status { isOk() } }
+        studio {
+            delete("/api/v1/studio/entries/${project.id}/publication") {
+                jsonBody("""{"revision":${project.revision}}""")
+            }
+        }.andExpect { status { isOk() } }
         public("/collections/history?locale=en").andExpect { jsonPath("$.items[0].content.project") { value(null) } }
     }
 
     @Test
-    fun `발행 취소는 revision을 보내면 충돌을 검사한다`() {
+    fun `발행 취소는 revision이 필수이고 다르면 충돌이다`() {
         definePortfolio()
         val project = publish(createEntry("project", """{"slug":"toast-acs","content":$PROJECT_CONTENT}"""))
+        studio { authDelete("/api/v1/studio/entries/${project.id}/publication") }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.code") { value("INVALID_INPUT") }
+        }
+        studio {
+            delete("/api/v1/studio/entries/${project.id}/publication") { jsonBody("{}") }
+        }.andExpect {
+            status { isBadRequest() }
+            jsonPath("$.code") { value("INVALID_INPUT") }
+        }
         studio {
             delete("/api/v1/studio/entries/${project.id}/publication") {
                 jsonBody("""{"revision":${project.revision + 1}}""")

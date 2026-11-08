@@ -35,7 +35,8 @@ data class PublishEntryRequest(
 )
 
 data class UnpublishEntryRequest(
-    val revision: Long? = null,
+    @field:NotNull
+    val revision: Long,
 )
 
 data class EntryResponse(

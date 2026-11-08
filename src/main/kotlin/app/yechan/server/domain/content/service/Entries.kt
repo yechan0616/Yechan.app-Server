@@ -113,10 +113,10 @@ class Entries(
     @Transactional
     fun unpublish(
         id: UUID,
-        revision: Long?,
+        revision: Long,
     ): EntryResponse {
         val entry = require(id)
-        revision?.let { checkRevision(entry, it) }
+        checkRevision(entry, revision)
         entry.unpublish()
         return entries.saveAndFlush(entry).toResponse()
     }

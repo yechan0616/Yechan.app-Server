@@ -93,6 +93,6 @@ class EntryController(
     @DeleteMapping("/entries/{id}/publication")
     fun unpublish(
         @PathVariable id: UUID,
-        @Valid @RequestBody(required = false) request: UnpublishEntryRequest?,
-    ): EntryResponse = entries.unpublish(id, request?.revision)
+        @Valid @RequestBody request: UnpublishEntryRequest,
+    ): EntryResponse = entries.unpublish(id, request.revision)
 }
