@@ -45,7 +45,7 @@ class GlobalExceptionHandler(
         return respond(ProblemDetails.of(CommonErrorCode.CONFLICT, clock))
     }
 
-    // Unique and foreign key violations are conflicts with existing data; check and not-null violations are bad input.
+    // Requests are validated before entities exist, so a not-null violation is a server mapping bug, not bad input.
     @ExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrity(ex: DataIntegrityViolationException): ResponseEntity<ProblemDetail> {
         val violation =
@@ -54,10 +54,15 @@ class GlobalExceptionHandler(
             }.filterIsInstance<ConstraintViolationException>().firstOrNull()
         val errorCode =
             when (violation?.kind) {
-                ConstraintKind.CHECK, ConstraintKind.NOT_NULL -> CommonErrorCode.INVALID_INPUT
+                ConstraintKind.CHECK -> CommonErrorCode.INVALID_INPUT
+                ConstraintKind.NOT_NULL -> CommonErrorCode.INTERNAL_ERROR
                 else -> CommonErrorCode.CONFLICT
             }
-        log.warn("Data integrity violation: {} ({})", violation?.constraintName, errorCode.code)
+        if (errorCode == CommonErrorCode.INTERNAL_ERROR) {
+            log.error("Not-null constraint violated: {}", violation?.constraintName, ex)
+        } else {
+            log.warn("Data integrity violation: {} ({})", violation?.constraintName, errorCode.code)
+        }
         return respond(ProblemDetails.of(errorCode, clock))
     }
 

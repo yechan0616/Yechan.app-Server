@@ -44,12 +44,14 @@ class GlobalExceptionHandlerTest(
     }
 
     @Test
-    fun `제약 위반은 종류에 따라 400 또는 409로 나뉜다`() {
-        listOf("CHECK", "NOT_NULL").forEach { kind ->
-            mockMvc.get("/api/v1/public/probe/constraint?kind=$kind").andExpect {
-                status { isBadRequest() }
-                jsonPath("$.code") { value("INVALID_INPUT") }
-            }
+    fun `제약 위반은 종류에 따라 400, 500 또는 409로 나뉜다`() {
+        mockMvc.get("/api/v1/public/probe/constraint?kind=CHECK").andExpect {
+            status { isBadRequest() }
+            jsonPath("$.code") { value("INVALID_INPUT") }
+        }
+        mockMvc.get("/api/v1/public/probe/constraint?kind=NOT_NULL").andExpect {
+            status { isInternalServerError() }
+            jsonPath("$.code") { value("INTERNAL_ERROR") }
         }
         listOf("UNIQUE", "FOREIGN_KEY", "OTHER").forEach { kind ->
             mockMvc.get("/api/v1/public/probe/constraint?kind=$kind").andExpect {
